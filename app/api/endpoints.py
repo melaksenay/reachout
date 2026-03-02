@@ -35,14 +35,14 @@ async def discover_influencers(
     
     for profile_data in raw_profiles:
         # 2. Execute a SQL SELECT statement to check for existing handles
-        statement = select(Influencer).where(Influencer.handle == profile_data["handle"])
+        statement = select(Influencer).where(Influencer.handle == profile_data.handle)
         existing_influencer = db.exec(statement).first()
-        
+
         if existing_influencer:
             saved_influencers.append(existing_influencer)
         else:
-            # 3. Instantiate the SQLModel class using dictionary unpacking (**profile_data)
-            new_influencer = Influencer(**profile_data)
+            # 3. Instantiate the SQLModel class from the validated DiscoveredProfile
+            new_influencer = Influencer(**profile_data.model_dump())
             db.add(new_influencer)
             new_influencers.append(new_influencer)
             saved_influencers.append(new_influencer)

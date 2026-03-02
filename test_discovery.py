@@ -24,9 +24,9 @@ async def main():
         print("-" * 50)
         
         for i, lead in enumerate(results, 1):
-            print(f"{i}. @{lead['handle']}")
-            print(f"   📝 Bio Snippet: {lead['bio_snippet']}")
-            print(f"   🔗 URL: {lead['url']}")
+            print(f"{i}. @{lead.handle}")
+            print(f"   📝 Bio: {lead.bio_text or ''}")
+            print(f"   🔗 URL: {lead.url}")
             print("-" * 50)
 
     except Exception as e:

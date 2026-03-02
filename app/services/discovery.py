@@ -1,9 +1,10 @@
 import asyncio
 import os
-from typing import List, Dict, Any
+from typing import List
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
+from app.models.influencer import DiscoveredProfile
 
 class TikTokDiscovery:
     def __init__(self):
@@ -12,7 +13,24 @@ class TikTokDiscovery:
         self.session_path = os.path.abspath("./tiktok_sessions")
         self.my_handle:str|None = os.getenv("MY_HANDLE", "")
 
-    async def search_profiles(self, query: str) -> List[Dict[str, Any]]:
+    async def warm_up(self) -> None:
+        """Visit TikTok to refresh the persistent session cookies.
+        Called at server startup — no data is scraped or saved."""
+        try:
+            async with Stealth().use_async(async_playwright()) as p:
+                context = await p.chromium.launch_persistent_context(
+                    self.session_path,
+                    headless=True,
+                    args=["--disable-blink-features=AutomationControlled"]
+                )
+                page = context.pages[0] if context.pages else await context.new_page()
+                await page.goto("https://www.tiktok.com", wait_until="networkidle")
+                await context.close()
+            print("✅ TikTok session warmed up successfully.")
+        except Exception as e:
+            print(f"⚠️  TikTok warm-up failed: {e}")
+
+    async def search_profiles(self, query: str) -> List[DiscoveredProfile]:
             leads = []
             async with Stealth().use_async(async_playwright()) as p:
                 context = await p.chromium.launch_persistent_context(
@@ -55,13 +73,13 @@ class TikTokDiscovery:
                     #Follower count is 3rd line.
                     follower_count = text_lines[2] if len(text_lines) > 2 else "No followers provided"
                     
-                    leads.append({
-                        "platform": "tiktok",
-                        "handle": handle,
-                        "url": f"https://www.tiktok.com/@{handle}",
-                        "bio_text": "",  # TikTok doesn't show bios in search results, so we'll leave this blank for now
-                        "follower_count": self._parse_followers(follower_count)
-                    })
+                    leads.append(DiscoveredProfile(
+                        platform="tiktok",
+                        handle=handle,
+                        url=f"https://www.tiktok.com/@{handle}",
+                        bio_text=None,  # TikTok doesn't show bios in search results
+                        follower_count=self._parse_followers(follower_count)
+                    ))
 
                 await context.close()
                     

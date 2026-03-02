@@ -1,4 +1,5 @@
 # app/main.py
+import asyncio
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from sqlmodel import SQLModel
@@ -10,13 +11,17 @@ from app.models.campaign import OutreachCampaign
 
 from app.api.endpoints import router as discovery_router
 from app.api.campaigns import router as campaign_router
+from app.services.discovery import TikTokDiscovery
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Create tables if they don't exist
     SQLModel.metadata.create_all(engine)
     print("✅ Database tables created or verified successfully.")
-    
+
+    # Warm up TikTok session in background (refreshes cookies, doesn't save data)
+    asyncio.create_task(TikTokDiscovery().warm_up())
+
     yield  # This is where the app runs
     
     

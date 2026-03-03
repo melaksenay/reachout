@@ -5,16 +5,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 **Run the FastAPI server:**
+
 ```bash
 uvicorn app.main:app --reload
 ```
 
 **TikTok session setup (one-time manual browser login):**
+
 ```bash
 python tiktok_sessions/setup_sesssion.py
 ```
 
 **Run the React frontend:**
+
 ```bash
 cd frontend && npm run dev    # Vite dev server at localhost:5173
 ```
@@ -36,11 +39,11 @@ Layered FastAPI monolith for influencer discovery and outreach. On startup, `Tik
 
 ### API Routes
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/influencers` | List saved influencers (newest first) |
-| POST | `/api/v1/discover?niche=&platform=` | Scrape TikTok, dedup, save influencers |
-| POST | `/api/v1/campaigns/{influencer_id}/draft` | Create outreach campaign draft |
+| Method | Path                                        | Description                            |
+| ------ | ------------------------------------------- | -------------------------------------- |
+| GET    | `/api/v1/influencers`                     | List saved influencers (newest first)  |
+| POST   | `/api/v1/discover?niche=&platform=`       | Scrape TikTok, dedup, save influencers |
+| POST   | `/api/v1/campaigns/{influencer_id}/draft` | Create outreach campaign draft         |
 
 ### Scraping Flow
 
@@ -57,7 +60,7 @@ Tables are auto-created via SQLModel metadata at startup. Schema changes should 
 
 ## Environment Variables
 
-Required in `.env`: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `MY_HANDLE` (your TikTok handle, filtered from discovery results).
+Required in `.env`: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `MY_HANDLE, ANTHROPIC_API_KEY` (your TikTok handle, 
 
 ### Frontend
 

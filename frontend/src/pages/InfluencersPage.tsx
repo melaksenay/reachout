@@ -6,12 +6,41 @@ export default function InfluencersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [draftLoading, setDraftLoading] = useState<Record<string, boolean>>({})
+  const [drafted, setDrafted] = useState<Record<string, boolean>>({})
+  const [draftErrors, setDraftErrors] = useState<Record<string, string>>({})
+
   useEffect(() => {
     api.getInfluencers()
       .then(setInfluencers)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
+
+  // Check which influencers already have campaigns
+  useEffect(() => {
+    api.getCampaigns().then(campaigns => {
+      const existing: Record<string, boolean> = {}
+      for (const c of campaigns) {
+        existing[c.influencer_id] = true
+      }
+      setDrafted(existing)
+    }).catch(() => {})
+  }, [])
+
+  const handleAddToPipeline = async (influencerId: string) => {
+    setDraftLoading(prev => ({ ...prev, [influencerId]: true }))
+    setDraftErrors(prev => ({ ...prev, [influencerId]: '' }))
+    try {
+      await api.draftCampaign(influencerId)
+      setDrafted(prev => ({ ...prev, [influencerId]: true }))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to add'
+      setDraftErrors(prev => ({ ...prev, [influencerId]: msg }))
+    } finally {
+      setDraftLoading(prev => ({ ...prev, [influencerId]: false }))
+    }
+  }
 
   if (loading) return <p className="text-gray-500">Loading influencers...</p>
   if (error) return <p className="text-red-600">Error: {error}</p>
@@ -30,6 +59,7 @@ export default function InfluencersPage() {
               <th className="px-4 py-2">Platform</th>
               <th className="px-4 py-2">Followers</th>
               <th className="px-4 py-2">Added</th>
+              <th className="px-4 py-2">Pipeline</th>
             </tr>
           </thead>
           <tbody>
@@ -53,6 +83,24 @@ export default function InfluencersPage() {
                 </td>
                 <td className="px-4 py-2 text-gray-500">
                   {new Date(inf.created_at).toLocaleDateString()}
+                </td>
+                <td className="px-4 py-2">
+                  {drafted[inf.id] ? (
+                    <span className="text-xs text-green-600 font-medium">In Pipeline</span>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleAddToPipeline(inf.id)}
+                        disabled={!!draftLoading[inf.id]}
+                        className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                      >
+                        {draftLoading[inf.id] ? 'Adding...' : 'Add to Pipeline'}
+                      </button>
+                      {draftErrors[inf.id] && (
+                        <p className="text-red-500 text-xs mt-0.5">{draftErrors[inf.id]}</p>
+                      )}
+                    </>
+                  )}
                 </td>
               </tr>
             ))}

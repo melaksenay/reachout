@@ -1,6 +1,6 @@
 import asyncio
 import os
-from typing import List
+from typing import Dict, List
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
@@ -84,6 +84,51 @@ class TikTokDiscovery:
                 await context.close()
                     
             return leads
+
+    async def scrape_profile(self, handle: str) -> Dict:
+        """Navigate to an influencer's TikTok profile and extract bio + recent video titles."""
+        result: Dict = {"bio": None, "recent_videos": []}
+        try:
+            async with Stealth().use_async(async_playwright()) as p:
+                context = await p.chromium.launch_persistent_context(
+                    self.session_path,
+                    headless=True,
+                    args=["--disable-blink-features=AutomationControlled"]
+                )
+                page = context.pages[0] if context.pages else await context.new_page()
+                await page.goto(
+                    f"https://www.tiktok.com/@{handle}",
+                    wait_until="networkidle",
+                    timeout=20000
+                )
+
+                # Extract bio — try multiple selectors since TikTok changes them
+                result["bio"] = await page.evaluate("""
+                    () => {
+                        const bio = document.querySelector('h2[data-e2e="user-bio"]');
+                        if (bio) return bio.innerText;
+                        const meta = document.querySelector('meta[name="description"]');
+                        return meta ? meta.getAttribute('content') : null;
+                    }
+                """)
+
+                # Extract recent video titles (up to 6)
+                result["recent_videos"] = await page.evaluate("""
+                    () => {
+                        const items = Array.from(
+                            document.querySelectorAll('div[data-e2e="user-post-item"]')
+                        ).slice(0, 6);
+                        return items.map(el => {
+                            const link = el.querySelector('a');
+                            return link ? (link.getAttribute('title') || link.innerText || '').trim() : null;
+                        }).filter(Boolean);
+                    }
+                """)
+
+                await context.close()
+        except Exception as e:
+            print(f"Profile scrape for @{handle} failed: {e}")
+        return result
 
     def _parse_followers(self, follower_str: str) -> int:
         """Simple helper to turn '1.2M' into 1200000"""

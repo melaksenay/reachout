@@ -4,6 +4,7 @@ import SignUpPage from './pages/SignUpPage'
 import InfluencersPage from './pages/InfluencersPage'
 import DiscoverPage from './pages/DiscoverPage'
 import CampaignsPage from './pages/CampaignsPage'
+import SettingsPage from './pages/SettingsPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import NavBar from './components/NavBar'
 
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/influencers" element={<InfluencersPage />} />
           <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>
     </Routes>

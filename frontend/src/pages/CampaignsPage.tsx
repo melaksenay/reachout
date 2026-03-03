@@ -1,81 +1,96 @@
-import { useEffect, useState } from 'react'
-import { api, type Influencer, type OutreachCampaign } from '../lib/api'
+import { useEffect, useState, useCallback } from 'react'
+import { api, type CampaignWithInfluencer, PIPELINE_STAGES, type PipelineStage } from '../lib/api'
+import KanbanColumn from '../components/KanbanColumn'
 
 export default function CampaignsPage() {
-  const [influencers, setInfluencers] = useState<Influencer[]>([])
-  const [listLoading, setListLoading] = useState(true)
-  const [listError, setListError] = useState<string | null>(null)
+  const [campaigns, setCampaigns] = useState<CampaignWithInfluencer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const [draftLoading, setDraftLoading] = useState<Record<string, boolean>>({})
-  const [campaigns, setCampaigns] = useState<Record<string, OutreachCampaign>>({})
-  const [draftErrors, setDraftErrors] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    api.getInfluencers()
-      .then(setInfluencers)
-      .catch(err => setListError(err.message))
-      .finally(() => setListLoading(false))
+  const fetchCampaigns = useCallback(async () => {
+    try {
+      const data = await api.getCampaigns()
+      setCampaigns(data)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load campaigns')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  const handleDraft = async (influencerId: string) => {
-    setDraftLoading(prev => ({ ...prev, [influencerId]: true }))
-    setDraftErrors(prev => ({ ...prev, [influencerId]: '' }))
-    try {
-      const campaign = await api.draftCampaign(influencerId)
-      setCampaigns(prev => ({ ...prev, [influencerId]: campaign }))
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to draft'
-      setDraftErrors(prev => ({ ...prev, [influencerId]: msg }))
-    } finally {
-      setDraftLoading(prev => ({ ...prev, [influencerId]: false }))
-    }
-  }
+  useEffect(() => {
+    fetchCampaigns()
+  }, [fetchCampaigns])
 
-  if (listLoading) return <p className="text-gray-500">Loading influencers...</p>
-  if (listError) return <p className="text-red-600">Error: {listError}</p>
-  if (influencers.length === 0) {
-    return <p className="text-gray-500">No influencers yet. Try the Discover page first.</p>
-  }
+  const handleStatusChange = useCallback(
+    async (campaignId: string, newStatus: PipelineStage) => {
+      // Optimistic update
+      setCampaigns(prev =>
+        prev.map(c =>
+          c.id === campaignId ? { ...c, status: newStatus, status_updated_at: new Date().toISOString() } : c,
+        ),
+      )
+      try {
+        await api.updateCampaignStatus(campaignId, newStatus)
+      } catch {
+        // Revert on failure
+        await fetchCampaigns()
+      }
+    },
+    [fetchCampaigns],
+  )
+
+  const handleNotesChange = useCallback(
+    async (campaignId: string, notes: string) => {
+      try {
+        await api.updateCampaignNotes(campaignId, notes)
+      } catch {
+        // Silently fail — notes will be stale but not lost locally
+      }
+    },
+    [],
+  )
+
+  const handleMessageChange = useCallback(
+    async (campaignId: string, message: string) => {
+      try {
+        await api.updateCampaignMessage(campaignId, message)
+      } catch {
+        // Silently fail — message is preserved locally
+      }
+    },
+    [],
+  )
+
+  if (loading) return <p className="text-gray-500 p-4">Loading pipeline...</p>
+  if (error) return <p className="text-red-600 p-4">Error: {error}</p>
+
+  const campaignsByStage = (stage: PipelineStage) =>
+    campaigns.filter(c => c.status === stage)
 
   return (
     <div>
-      <h1 className="text-xl font-bold mb-4">Campaigns</h1>
-      <div className="space-y-4">
-        {influencers.map(inf => (
-          <div key={inf.id} className="border rounded p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <span className="font-medium">@{inf.handle}</span>
-                <span className="ml-2 text-sm text-gray-500 capitalize">{inf.platform}</span>
-              </div>
-              <button
-                onClick={() => handleDraft(inf.id)}
-                disabled={!!draftLoading[inf.id]}
-                className="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 disabled:opacity-50 cursor-pointer"
-              >
-                {draftLoading[inf.id]
-                  ? 'Drafting...'
-                  : campaigns[inf.id]
-                    ? 'Re-draft'
-                    : 'Draft Message'}
-              </button>
-            </div>
+      <h1 className="text-xl font-bold mb-4">Pipeline</h1>
 
-            {draftErrors[inf.id] && (
-              <p className="text-red-600 text-sm">{draftErrors[inf.id]}</p>
-            )}
-
-            {campaigns[inf.id] && (
-              <div className="mt-2 bg-gray-50 rounded p-3 text-sm">
-                <p className="text-xs text-gray-500 mb-1 uppercase tracking-wide">
-                  Status: {campaigns[inf.id].status}
-                </p>
-                <p className="whitespace-pre-wrap">{campaigns[inf.id].generated_message}</p>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      {campaigns.length === 0 ? (
+        <p className="text-gray-500">
+          No campaigns yet. Go to <span className="font-medium">Discover</span> to find influencers,
+          then draft messages from the <span className="font-medium">Influencers</span> page.
+        </p>
+      ) : (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {PIPELINE_STAGES.map(stage => (
+            <KanbanColumn
+              key={stage}
+              stage={stage}
+              campaigns={campaignsByStage(stage)}
+              onStatusChange={handleStatusChange}
+              onNotesChange={handleNotesChange}
+              onMessageChange={handleMessageChange}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

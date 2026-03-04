@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     SUPABASE_AUTH_REDIRECT: str = ""  # OAuth redirect URL (planned)
     # model_config tells Pydantic exactly how to load the variables
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
-    ANTHROPIC_API_KEY: str = ""  # For future use with AI summarization and outreach copywriting
+    ANTHROPIC_API_KEY: str = ""
+    SUPABASE_JWT_SECRET: str = ""
 
 # Instantiate the settings object to be imported by other files
 @lru_cache()

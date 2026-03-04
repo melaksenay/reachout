@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient'
+
 const BASE = '/api/v1'
 
 export interface Influencer {
@@ -34,7 +36,20 @@ export const PIPELINE_STAGES = [
 export type PipelineStage = typeof PIPELINE_STAGES[number]
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options)
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: Record<string, string> = {
+    ...(options?.headers as Record<string, string> ?? {}),
+  }
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+
+  const res = await fetch(url, { ...options, headers })
+  if (res.status === 401) {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+    throw new Error('Session expired')
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.detail ?? `HTTP ${res.status}`)
@@ -74,7 +89,18 @@ export interface UserSettings {
   updated_at: string
 }
 
+export interface DashboardData {
+  total_influencers: number
+  total_campaigns: number
+  campaigns_by_status: Record<string, number>
+  response_rate: number
+  recent_campaigns: CampaignWithInfluencer[]
+}
+
 export const api = {
+  getDashboard: () =>
+    request<DashboardData>(`${BASE}/dashboard`),
+
   getInfluencers: (filters?: InfluencerFilters) => {
     const params = new URLSearchParams()
     if (filters?.platform) params.set('platform', filters.platform)

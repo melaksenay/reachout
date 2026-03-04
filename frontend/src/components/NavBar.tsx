@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const links = [
+  { to: '/dashboard', label: 'Dashboard' },
   { to: '/influencers', label: 'Influencers' },
   { to: '/discover', label: 'Discover' },
   { to: '/campaigns', label: 'Pipeline' },

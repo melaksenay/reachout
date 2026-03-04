@@ -5,8 +5,9 @@ from sqlmodel import Session, select
 
 from app.db.session import get_db
 from app.models.user_settings import UserSettings, UserSettingsUpdate
+from app.core.auth import get_current_user_id
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_id)])
 
 
 @router.get("/settings")

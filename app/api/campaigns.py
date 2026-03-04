@@ -17,8 +17,9 @@ from app.models.campaign import (
 from app.models.user_settings import UserSettings
 from app.services.discovery import TikTokDiscovery
 from app.services.ai_outreach import AIOutreachService
+from app.core.auth import get_current_user_id
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_id)])
 
 
 @router.get("/campaigns", response_model=List[CampaignWithInfluencer])

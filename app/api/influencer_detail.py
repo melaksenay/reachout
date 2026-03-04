@@ -9,8 +9,9 @@ from app.models.influencer import Influencer
 from app.models.campaign import OutreachCampaign
 from app.models.influencer_note import InfluencerNote, NoteCreate
 from app.models.tag import Tag, InfluencerTag, TagCreate
+from app.core.auth import get_current_user_id
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_id)])
 
 
 # --- Influencer Detail ---

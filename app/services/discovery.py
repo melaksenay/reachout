@@ -20,11 +20,20 @@ class TikTokDiscovery:
             async with Stealth().use_async(async_playwright()) as p:
                 context = await p.chromium.launch_persistent_context(
                     self.session_path,
-                    headless=True,
+                    headless=False,
                     args=["--disable-blink-features=AutomationControlled"]
                 )
                 page = context.pages[0] if context.pages else await context.new_page()
-                await page.goto("https://www.tiktok.com", wait_until="networkidle")
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        await page.goto("https://www.tiktok.com/search/user?q=fit", wait_until="networkidle", timeout = 30000)
+                        break
+                    except Exception as e:
+                        if attempt == max_retries - 1:
+                            print(f"⚠️  TikTok warm-up failed after {max_retries} attempts")
+                            raise e
+                        print(f"Attempt {attempt + 1} failed. Retrying")
                 await context.close()
             print("✅ TikTok session warmed up successfully.")
         except Exception as e:
@@ -35,7 +44,7 @@ class TikTokDiscovery:
             async with Stealth().use_async(async_playwright()) as p:
                 context = await p.chromium.launch_persistent_context(
                     self.session_path,
-                    headless=True,
+                    headless=False,
                     args=["--disable-blink-features=AutomationControlled"]
                 )
                 page = context.pages[0] if context.pages else await context.new_page()

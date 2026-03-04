@@ -42,6 +42,32 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export interface InfluencerNote {
+  id: string
+  influencer_id: string
+  body: string
+  created_at: string
+}
+
+export interface Tag {
+  id: string
+  name: string
+}
+
+export interface InfluencerDetail {
+  influencer: Influencer
+  campaigns: OutreachCampaign[]
+  notes: InfluencerNote[]
+  tags: Tag[]
+}
+
+export interface InfluencerFilters {
+  platform?: string
+  min_followers?: number
+  max_followers?: number
+  tag?: string
+}
+
 export interface UserSettings {
   id: string
   brand_description: string | null
@@ -49,8 +75,53 @@ export interface UserSettings {
 }
 
 export const api = {
-  getInfluencers: () =>
-    request<Influencer[]>(`${BASE}/influencers`),
+  getInfluencers: (filters?: InfluencerFilters) => {
+    const params = new URLSearchParams()
+    if (filters?.platform) params.set('platform', filters.platform)
+    if (filters?.min_followers != null) params.set('min_followers', String(filters.min_followers))
+    if (filters?.max_followers != null) params.set('max_followers', String(filters.max_followers))
+    if (filters?.tag) params.set('tag', filters.tag)
+    const qs = params.toString()
+    return request<Influencer[]>(`${BASE}/influencers${qs ? `?${qs}` : ''}`)
+  },
+
+  getInfluencerDetail: (influencerId: string) =>
+    request<InfluencerDetail>(`${BASE}/influencers/${influencerId}`),
+
+  addNote: (influencerId: string, body: string) =>
+    request<InfluencerNote>(
+      `${BASE}/influencers/${influencerId}/notes`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body }),
+      },
+    ),
+
+  deleteNote: (influencerId: string, noteId: string) =>
+    request<{ ok: boolean }>(
+      `${BASE}/influencers/${influencerId}/notes/${noteId}`,
+      { method: 'DELETE' },
+    ),
+
+  getTags: () =>
+    request<Tag[]>(`${BASE}/tags`),
+
+  addTag: (influencerId: string, name: string) =>
+    request<Tag>(
+      `${BASE}/influencers/${influencerId}/tags`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      },
+    ),
+
+  removeTag: (influencerId: string, tagId: string) =>
+    request<{ ok: boolean }>(
+      `${BASE}/influencers/${influencerId}/tags/${tagId}`,
+      { method: 'DELETE' },
+    ),
 
   discover: (niche: string, platform = 'tiktok') =>
     request<Influencer[]>(

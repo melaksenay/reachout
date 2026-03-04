@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import SignUpPage from './pages/SignUpPage'
 import InfluencersPage from './pages/InfluencersPage'
+import InfluencerDetailPage from './pages/InfluencerDetailPage'
 import DiscoverPage from './pages/DiscoverPage'
 import CampaignsPage from './pages/CampaignsPage'
 import SettingsPage from './pages/SettingsPage'
@@ -17,6 +18,7 @@ export default function App() {
         <Route element={<NavBar />}>
           <Route path="/" element={<Navigate to="/influencers" replace />} />
           <Route path="/influencers" element={<InfluencersPage />} />
+          <Route path="/influencers/:id" element={<InfluencerDetailPage />} />
           <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/settings" element={<SettingsPage />} />

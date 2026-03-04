@@ -1,10 +1,11 @@
+from typing import List, Optional
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select, desc
-from typing import List
 
 from app.db.session import get_db
 from app.services.discovery import TikTokDiscovery
 from app.models.influencer import Influencer
+from app.models.tag import Tag, InfluencerTag
 
 router = APIRouter()
 
@@ -12,14 +13,36 @@ def get_scraper() -> TikTokDiscovery:
     return TikTokDiscovery()
 
 
-@router.get("/influencers", response_model=List[Influencer])
-async def get_all_influencers(db: Session = Depends(get_db)):
-    statement = select(Influencer).order_by(desc(Influencer.created_at))
+@router.get("/influencers")
+async def get_all_influencers(
+    platform: Optional[str] = None,
+    min_followers: Optional[int] = None,
+    max_followers: Optional[int] = None,
+    tag: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    statement = select(Influencer)
+
+    if platform:
+        statement = statement.where(Influencer.platform == platform)
+    if min_followers is not None:
+        statement = statement.where(Influencer.follower_count >= min_followers)
+    if max_followers is not None:
+        statement = statement.where(Influencer.follower_count <= max_followers)
+    if tag:
+        statement = (
+            statement
+            .join(InfluencerTag, InfluencerTag.influencer_id == Influencer.id)
+            .join(Tag, Tag.id == InfluencerTag.tag_id)
+            .where(Tag.name == tag)
+        )
+
+    statement = statement.order_by(desc(Influencer.created_at))
     results = db.exec(statement).all()
-    return results
+    return [r.model_dump(exclude={"campaigns"}) for r in results]
 
 # Setting response_model automatically serializes the output and filters internal fields
-@router.post("/discover", response_model=List[Influencer])
+@router.post("/discover")
 async def discover_influencers(
     niche: str, 
     platform: str = "tiktok",
@@ -54,4 +77,4 @@ async def discover_influencers(
         for influencer in new_influencers:
             db.refresh(influencer)
             
-    return saved_influencers
+    return [i.model_dump(exclude={"campaigns"}) for i in saved_influencers]

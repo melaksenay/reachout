@@ -51,9 +51,14 @@ export default function DiscoverPage() {
             <option value="video">Videos</option>
             <option value="hashtag">Hashtag</option>
           </select>
-          {searchType !== 'user' && (
+          {searchType === 'hashtag' && (
             <p className="text-xs text-gray-500 mt-1">
-              Finds creators by their content. Each profile is enriched with follower counts (~5s per creator).
+              Find creators by hashtag. Only put one hashtag.
+            </p>
+          )}
+          {searchType === 'video' && (
+            <p className="text-xs text-gray-500 mt-1">
+              Find creators by their content. You may search multiple hashtags e.g. #fitness #brandpartner or you may search key words.
             </p>
           )}
         </div>
@@ -82,7 +87,7 @@ export default function DiscoverPage() {
         <p className="text-gray-500 text-sm animate-pulse">
           {searchType === 'user'
             ? 'Scraping TikTok — this can take up to 20 seconds. Please wait...'
-            : 'Searching TikTok and enriching profiles — this may take a minute. Please wait...'}
+            : 'Searching TikTok — this can take up to 20 seconds. Please wait...'}
         </p>
       )}
 

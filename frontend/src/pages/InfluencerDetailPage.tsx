@@ -12,6 +12,9 @@ export default function InfluencerDetailPage() {
   const [noteBody, setNoteBody] = useState('')
   const [noteLoading, setNoteLoading] = useState(false)
 
+  // Refresh state
+  const [refreshing, setRefreshing] = useState(false)
+
   // Tags state
   const [tagInput, setTagInput] = useState('')
   const [allTags, setAllTags] = useState<Tag[]>([])
@@ -77,6 +80,16 @@ export default function InfluencerDetailPage() {
     } catch { /* ignore */ }
   }
 
+  const handleRefresh = async () => {
+    if (!id) return
+    setRefreshing(true)
+    try {
+      const updated = await api.refreshProfile(id)
+      setData(prev => prev ? { ...prev, influencer: updated } : prev)
+    } catch { /* ignore */ }
+    finally { setRefreshing(false) }
+  }
+
   const handleQuickTag = async (tag: Tag) => {
     if (!id) return
     if (data?.tags.some(t => t.id === tag.id)) return
@@ -106,10 +119,20 @@ export default function InfluencerDetailPage() {
             {influencer.platform}
           </span>
         </div>
-        <div className="flex gap-4 mt-1 text-sm text-gray-500">
-          {influencer.follower_count != null && (
+        <div className="flex gap-4 mt-1 text-sm text-gray-500 items-center">
+          {influencer.follower_count != null ? (
             <span>{influencer.follower_count.toLocaleString()} followers</span>
+          ) : (
+            <span className="text-gray-400 italic">No follower data</span>
           )}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="text-blue-500 hover:underline text-sm cursor-pointer disabled:opacity-50"
+          >
+            {refreshing ? 'Refreshing...' : influencer.follower_count == null ? 'Fetch profile data' : 'Refresh'}
+          </button>
           <a href={influencer.url} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
             View profile
           </a>

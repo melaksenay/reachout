@@ -113,6 +113,21 @@ export default function InfluencersPage() {
     }
   }
 
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return
+    if (!window.confirm(`Delete ${selected.size} influencer(s)? This also removes their campaigns, notes, and tags.`)) return
+    setBulkLoading(true)
+    try {
+      await api.bulkDelete([...selected])
+      setSelected(new Set())
+      await fetchInfluencers()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Bulk delete failed')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
   const handleBulkTag = async () => {
     if (!tagInput.trim()) return
     setBulkLoading(true)
@@ -318,6 +333,13 @@ export default function InfluencersPage() {
             Tag
           </button>
         )}
+        <button
+          onClick={handleBulkDelete}
+          disabled={bulkLoading}
+          className="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded disabled:opacity-50 cursor-pointer"
+        >
+          {bulkLoading ? 'Deleting...' : `Delete ${selected.size}`}
+        </button>
       </BulkActionBar>
     </div>
   )

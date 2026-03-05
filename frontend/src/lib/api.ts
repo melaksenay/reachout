@@ -114,6 +114,12 @@ export const api = {
   getInfluencerDetail: (influencerId: string) =>
     request<InfluencerDetail>(`${BASE}/influencers/${influencerId}`),
 
+  refreshProfile: (influencerId: string) =>
+    request<Influencer>(
+      `${BASE}/influencers/${influencerId}/refresh`,
+      { method: 'POST' },
+    ),
+
   addNote: (influencerId: string, body: string) =>
     request<InfluencerNote>(
       `${BASE}/influencers/${influencerId}/notes`,
@@ -149,9 +155,9 @@ export const api = {
       { method: 'DELETE' },
     ),
 
-  discover: (niche: string, platform = 'tiktok') =>
+  discover: (niche: string, platform = 'tiktok', searchType = 'user') =>
     request<Influencer[]>(
-      `${BASE}/discover?niche=${encodeURIComponent(niche)}&platform=${encodeURIComponent(platform)}`,
+      `${BASE}/discover?niche=${encodeURIComponent(niche)}&platform=${encodeURIComponent(platform)}&search_type=${encodeURIComponent(searchType)}`,
       { method: 'POST' },
     ),
 
@@ -212,6 +218,16 @@ export const api = {
   bulkDraft: (influencerIds: string[]) =>
     request<OutreachCampaign[]>(
       `${BASE}/campaigns/bulk-draft`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ influencer_ids: influencerIds }),
+      },
+    ),
+
+  bulkDelete: (influencerIds: string[]) =>
+    request<{ deleted: number }>(
+      `${BASE}/influencers/bulk-delete`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -10,8 +10,12 @@ from app.models.campaign import OutreachCampaign
 from app.models.influencer_note import InfluencerNote, NoteCreate
 from app.models.tag import Tag, InfluencerTag, TagCreate
 from app.core.auth import get_current_user_id
+from app.services.discovery import TikTokDiscovery
 
 router = APIRouter(dependencies=[Depends(get_current_user_id)])
+
+def get_scraper() -> TikTokDiscovery:
+    return TikTokDiscovery()
 
 
 # --- Influencer Detail ---
@@ -50,6 +54,31 @@ def get_influencer_detail(
         "notes": notes,
         "tags": tag_rows,
     }
+
+
+# --- Refresh Profile ---
+
+@router.post("/influencers/{influencer_id}/refresh")
+async def refresh_profile(
+    influencer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    scraper: TikTokDiscovery = Depends(get_scraper),
+):
+    influencer = db.get(Influencer, influencer_id)
+    if not influencer:
+        raise HTTPException(status_code=404, detail="Influencer not found")
+
+    data = await scraper.scrape_profile(influencer.handle)
+
+    if data.get("bio"):
+        influencer.bio_text = data["bio"]
+    if data.get("follower_count"):
+        influencer.follower_count = data["follower_count"]
+
+    db.add(influencer)
+    db.commit()
+    db.refresh(influencer)
+    return influencer.model_dump(exclude={"campaigns"})
 
 
 # --- Notes ---

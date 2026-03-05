@@ -4,6 +4,7 @@ import { api, type Influencer } from '../lib/api'
 export default function DiscoverPage() {
   const [niche, setNiche] = useState('')
   const [platform, setPlatform] = useState('tiktok')
+  const [searchType, setSearchType] = useState('user')
   const [results, setResults] = useState<Influencer[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -16,7 +17,7 @@ export default function DiscoverPage() {
     setLoading(true)
     setHasSearched(true)
     try {
-      const found = await api.discover(niche, platform)
+      const found = await api.discover(niche, platform, searchType)
       setResults(found)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Discovery failed')
@@ -34,10 +35,27 @@ export default function DiscoverPage() {
           <input
             value={niche}
             onChange={e => setNiche(e.target.value)}
-            placeholder="e.g. fitness, cooking, tech"
+            placeholder={searchType === 'hashtag' ? 'e.g. #fitnessmotivation (no spaces)' : 'e.g. fitness, cooking, tech'}
             required
             className="w-full border rounded px-3 py-2 text-sm"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Search by</label>
+          <select
+            value={searchType}
+            onChange={e => setSearchType(e.target.value)}
+            className="w-full border rounded px-3 py-2 text-sm"
+          >
+            <option value="user">Username</option>
+            <option value="video">Videos</option>
+            <option value="hashtag">Hashtag</option>
+          </select>
+          {searchType !== 'user' && (
+            <p className="text-xs text-gray-500 mt-1">
+              Finds creators by their content. Each profile is enriched with follower counts (~5s per creator).
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Platform</label>
@@ -62,7 +80,9 @@ export default function DiscoverPage() {
 
       {loading && (
         <p className="text-gray-500 text-sm animate-pulse">
-          Scraping TikTok — this can take up to 20 seconds. Please wait...
+          {searchType === 'user'
+            ? 'Scraping TikTok — this can take up to 20 seconds. Please wait...'
+            : 'Searching TikTok and enriching profiles — this may take a minute. Please wait...'}
         </p>
       )}
 

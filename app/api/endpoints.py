@@ -47,14 +47,20 @@ async def get_all_influencers(
 # Setting response_model automatically serializes the output and filters internal fields
 @router.post("/discover")
 async def discover_influencers(
-    niche: str, 
+    niche: str,
     platform: str = "tiktok",
+    search_type: str = "user",
     db: Session = Depends(get_db),
     scraper: TikTokDiscovery = Depends(get_scraper)
 ):
-    
-    # 1. Fetch raw dictionaries from the scraper service
-    raw_profiles = await scraper.search_profiles(query=niche)
+
+    # 1. Fetch raw profiles using the selected search method
+    if search_type == "video":
+        raw_profiles = await scraper.search_by_videos(query=niche)
+    elif search_type == "hashtag":
+        raw_profiles = await scraper.search_by_hashtag(hashtag=niche)
+    else:
+        raw_profiles = await scraper.search_profiles(query=niche)
     
     saved_influencers = []
     new_influencers = []
@@ -81,6 +87,25 @@ async def discover_influencers(
             db.refresh(influencer)
             
     return [i.model_dump(exclude={"campaigns"}) for i in saved_influencers]
+
+
+class BulkDeleteRequest(BaseModel):
+    influencer_ids: List[str]
+
+
+@router.post("/influencers/bulk-delete")
+def bulk_delete(
+    body: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+):
+    deleted = 0
+    for inf_id in body.influencer_ids:
+        influencer = db.get(Influencer, uuid.UUID(inf_id))
+        if influencer:
+            db.delete(influencer)
+            deleted += 1
+    db.commit()
+    return {"deleted": deleted}
 
 
 class BulkTagRequest(BaseModel):

@@ -7,6 +7,8 @@ interface KanbanColumnProps {
   onStatusChange: (campaignId: string, status: PipelineStage) => Promise<void>
   onNotesChange: (campaignId: string, notes: string) => Promise<void>
   onMessageChange: (campaignId: string, message: string) => Promise<void>
+  selectedCampaigns?: Set<string>
+  onToggleSelect?: (campaignId: string) => void
 }
 
 const STAGE_COLORS: Record<string, string> = {
@@ -19,7 +21,7 @@ const STAGE_COLORS: Record<string, string> = {
   rejected: 'bg-red-100 text-red-700',
 }
 
-export default function KanbanColumn({ stage, campaigns, onStatusChange, onNotesChange, onMessageChange }: KanbanColumnProps) {
+export default function KanbanColumn({ stage, campaigns, onStatusChange, onNotesChange, onMessageChange, selectedCampaigns, onToggleSelect }: KanbanColumnProps) {
   return (
     <div className="flex flex-col min-w-65 max-w-70 shrink-0">
       {/* Column header */}
@@ -42,6 +44,8 @@ export default function KanbanColumn({ stage, campaigns, onStatusChange, onNotes
             onStatusChange={onStatusChange}
             onNotesChange={onNotesChange}
             onMessageChange={onMessageChange}
+            selected={selectedCampaigns?.has(campaign.id)}
+            onToggleSelect={onToggleSelect}
           />
         ))}
       </div>

@@ -1,5 +1,7 @@
 from typing import List, Optional
+import uuid
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlmodel import Session, select, desc
 
 from app.db.session import get_db
@@ -79,3 +81,38 @@ async def discover_influencers(
             db.refresh(influencer)
             
     return [i.model_dump(exclude={"campaigns"}) for i in saved_influencers]
+
+
+class BulkTagRequest(BaseModel):
+    influencer_ids: List[str]
+    tag_name: str
+
+
+@router.post("/influencers/bulk-tag")
+def bulk_tag(
+    body: BulkTagRequest,
+    db: Session = Depends(get_db),
+):
+    # Get or create tag
+    tag = db.exec(select(Tag).where(Tag.name == body.tag_name)).first()
+    if not tag:
+        tag = Tag(name=body.tag_name)
+        db.add(tag)
+        db.commit()
+        db.refresh(tag)
+
+    tagged = 0
+    for inf_id in body.influencer_ids:
+        uid = uuid.UUID(inf_id)
+        existing = db.exec(
+            select(InfluencerTag).where(
+                InfluencerTag.influencer_id == uid,
+                InfluencerTag.tag_id == tag.id,
+            )
+        ).first()
+        if not existing:
+            db.add(InfluencerTag(influencer_id=uid, tag_id=tag.id))
+            tagged += 1
+
+    db.commit()
+    return {"tagged": tagged}

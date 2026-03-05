@@ -7,12 +7,14 @@ import uuid
 
 from app.db.session import get_db
 from app.models.influencer import Influencer
+from pydantic import BaseModel, field_validator
 from app.models.campaign import (
     OutreachCampaign,
     CampaignStatusUpdate,
     CampaignNotesUpdate,
     CampaignMessageUpdate,
     CampaignWithInfluencer,
+    VALID_STATUSES,
 )
 from app.models.user_settings import UserSettings
 from app.services.discovery import TikTokDiscovery
@@ -153,3 +155,88 @@ async def draft_campaign(
     db.refresh(new_campaign)
 
     return new_campaign
+
+
+class BulkDraftRequest(BaseModel):
+    influencer_ids: List[str]
+
+
+class BulkStatusRequest(BaseModel):
+    campaign_ids: List[str]
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        if v not in VALID_STATUSES:
+            raise ValueError(f"status must be one of {VALID_STATUSES}")
+        return v
+
+
+@router.post("/campaigns/bulk-draft")
+async def bulk_draft(
+    body: BulkDraftRequest,
+    db: Session = Depends(get_db),
+):
+    settings = db.exec(
+        select(UserSettings).where(UserSettings.key == "default")
+    ).first()
+    brand_description = settings.brand_description if settings else None
+    if not brand_description:
+        raise HTTPException(
+            status_code=400,
+            detail="Brand description not set. Go to Settings first.",
+        )
+
+    discovery = TikTokDiscovery()
+    ai_service = AIOutreachService()
+    results = []
+
+    for inf_id in body.influencer_ids:
+        uid = uuid.UUID(inf_id)
+        influencer = db.get(Influencer, uid)
+        if not influencer:
+            continue
+
+        # Skip if campaign already exists
+        existing = db.exec(
+            select(OutreachCampaign).where(OutreachCampaign.influencer_id == uid)
+        ).first()
+        if existing:
+            results.append(existing)
+            continue
+
+        profile_context = await discovery.scrape_profile(influencer.handle)
+        draft_text = ai_service.generate_message(influencer, brand_description, profile_context)
+
+        campaign = OutreachCampaign(
+            influencer_id=influencer.id,
+            generated_message=draft_text,
+            status="drafted",
+        )
+        db.add(campaign)
+        db.commit()
+        db.refresh(campaign)
+        results.append(campaign)
+
+    return results
+
+
+@router.patch("/campaigns/bulk-status")
+def bulk_update_status(
+    body: BulkStatusRequest,
+    db: Session = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    updated = 0
+    for cid in body.campaign_ids:
+        campaign = db.get(OutreachCampaign, uuid.UUID(cid))
+        if not campaign:
+            continue
+        campaign.status = body.status
+        campaign.status_updated_at = now
+        campaign.last_updated = now
+        db.add(campaign)
+        updated += 1
+    db.commit()
+    return {"updated": updated}

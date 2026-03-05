@@ -1,11 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api, type CampaignWithInfluencer, PIPELINE_STAGES, type PipelineStage } from '../lib/api'
 import KanbanColumn from '../components/KanbanColumn'
+import BulkActionBar from '../components/BulkActionBar'
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<CampaignWithInfluencer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Bulk selection
+  const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
 
   const fetchCampaigns = useCallback(async () => {
     try {
@@ -62,6 +67,28 @@ export default function CampaignsPage() {
     [],
   )
 
+  const toggleSelect = useCallback((campaignId: string) => {
+    setSelectedCampaigns(prev => {
+      const next = new Set(prev)
+      if (next.has(campaignId)) next.delete(campaignId)
+      else next.add(campaignId)
+      return next
+    })
+  }, [])
+
+  const handleBulkStatus = async (status: PipelineStage) => {
+    setBulkLoading(true)
+    try {
+      await api.bulkUpdateStatus([...selectedCampaigns], status)
+      setSelectedCampaigns(new Set())
+      await fetchCampaigns()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Bulk status update failed')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
   if (loading) return <p className="text-gray-500 p-4">Loading pipeline...</p>
   if (error) return <p className="text-red-600 p-4">Error: {error}</p>
 
@@ -87,10 +114,30 @@ export default function CampaignsPage() {
               onStatusChange={handleStatusChange}
               onNotesChange={handleNotesChange}
               onMessageChange={handleMessageChange}
+              selectedCampaigns={selectedCampaigns}
+              onToggleSelect={toggleSelect}
             />
           ))}
         </div>
       )}
+
+      <BulkActionBar count={selectedCampaigns.size} onClear={() => setSelectedCampaigns(new Set())}>
+        <label className="text-sm text-gray-300">Move to:</label>
+        <select
+          disabled={bulkLoading}
+          defaultValue=""
+          onChange={e => {
+            if (e.target.value) handleBulkStatus(e.target.value as PipelineStage)
+            e.target.value = ''
+          }}
+          className="text-sm bg-gray-700 text-white border border-gray-600 rounded px-2 py-1.5 cursor-pointer disabled:opacity-50"
+        >
+          <option value="" disabled>Select stage...</option>
+          {PIPELINE_STAGES.map(stage => (
+            <option key={stage} value={stage}>{stage}</option>
+          ))}
+        </select>
+      </BulkActionBar>
     </div>
   )
 }

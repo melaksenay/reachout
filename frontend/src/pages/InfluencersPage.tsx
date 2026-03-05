@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Influencer, type Tag, type InfluencerFilters } from '../lib/api'
+import BulkActionBar from '../components/BulkActionBar'
 
 export default function InfluencersPage() {
   const navigate = useNavigate()
@@ -18,6 +19,12 @@ export default function InfluencersPage() {
   const [maxFollowers, setMaxFollowers] = useState('')
   const [tagFilter, setTagFilter] = useState('')
   const [allTags, setAllTags] = useState<Tag[]>([])
+
+  // Bulk selection
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [tagInput, setTagInput] = useState('')
+  const [showTagInput, setShowTagInput] = useState(false)
 
   const fetchInfluencers = useCallback(async () => {
     setLoading(true)
@@ -66,6 +73,60 @@ export default function InfluencersPage() {
       setDraftErrors(prev => ({ ...prev, [influencerId]: msg }))
     } finally {
       setDraftLoading(prev => ({ ...prev, [influencerId]: false }))
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selected.size === influencers.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(influencers.map(i => i.id)))
+    }
+  }
+
+  const undraftedSelected = [...selected].filter(id => !drafted[id])
+
+  const handleBulkDraft = async () => {
+    if (undraftedSelected.length === 0) return
+    setBulkLoading(true)
+    try {
+      await api.bulkDraft(undraftedSelected)
+      setSelected(new Set())
+      // Refresh drafted state
+      const campaigns = await api.getCampaigns()
+      const existing: Record<string, boolean> = {}
+      for (const c of campaigns) existing[c.influencer_id] = true
+      setDrafted(existing)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Bulk draft failed')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  const handleBulkTag = async () => {
+    if (!tagInput.trim()) return
+    setBulkLoading(true)
+    try {
+      await api.bulkTag([...selected], tagInput.trim())
+      setSelected(new Set())
+      setTagInput('')
+      setShowTagInput(false)
+      // Refresh tags
+      api.getTags().then(setAllTags).catch(() => {})
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Bulk tag failed')
+    } finally {
+      setBulkLoading(false)
     }
   }
 
@@ -146,6 +207,14 @@ export default function InfluencersPage() {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b bg-gray-50 text-left">
+                <th className="px-2 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === influencers.length && influencers.length > 0}
+                    onChange={toggleSelectAll}
+                    className="cursor-pointer"
+                  />
+                </th>
                 <th className="px-4 py-2">Handle</th>
                 <th className="px-4 py-2">Platform</th>
                 <th className="px-4 py-2">Followers</th>
@@ -158,8 +227,16 @@ export default function InfluencersPage() {
                 <tr
                   key={inf.id}
                   onClick={() => navigate(`/influencers/${inf.id}`)}
-                  className="border-b hover:bg-gray-50 cursor-pointer"
+                  className={`border-b hover:bg-gray-50 cursor-pointer ${selected.has(inf.id) ? 'bg-blue-50' : ''}`}
                 >
+                  <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(inf.id)}
+                      onChange={() => toggleSelect(inf.id)}
+                      className="cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-2">
                     <span className="text-blue-600">@{inf.handle}</span>
                   </td>
@@ -196,6 +273,52 @@ export default function InfluencersPage() {
           </table>
         </div>
       )}
+
+      <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <button
+          onClick={handleBulkDraft}
+          disabled={bulkLoading || undraftedSelected.length === 0}
+          className="text-sm bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded disabled:opacity-50 cursor-pointer"
+        >
+          {bulkLoading ? 'Drafting...' : undraftedSelected.length === 0 ? 'All in Pipeline' : `Draft ${undraftedSelected.length}`}
+        </button>
+        {showTagInput ? (
+          <form
+            onSubmit={e => { e.preventDefault(); handleBulkTag() }}
+            className="flex items-center gap-1"
+          >
+            <input
+              type="text"
+              value={tagInput}
+              onChange={e => setTagInput(e.target.value)}
+              placeholder="Tag name"
+              autoFocus
+              className="text-sm px-2 py-1 rounded bg-white text-gray-900 w-28 border border-gray-300"
+            />
+            <button
+              type="submit"
+              disabled={bulkLoading || !tagInput.trim()}
+              className="text-sm bg-green-500 hover:bg-green-600 text-white px-2 py-1.5 rounded disabled:opacity-50 cursor-pointer"
+            >
+              Apply
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowTagInput(false); setTagInput('') }}
+              className="text-sm text-gray-300 hover:text-white cursor-pointer"
+            >
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <button
+            onClick={() => setShowTagInput(true)}
+            className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded cursor-pointer"
+          >
+            Tag
+          </button>
+        )}
+      </BulkActionBar>
     </div>
   )
 }

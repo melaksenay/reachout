@@ -208,4 +208,34 @@ export const api = {
         body: JSON.stringify({ brand_description: brandDescription }),
       },
     ),
+
+  bulkDraft: (influencerIds: string[]) =>
+    request<OutreachCampaign[]>(
+      `${BASE}/campaigns/bulk-draft`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ influencer_ids: influencerIds }),
+      },
+    ),
+
+  bulkTag: (influencerIds: string[], tagName: string) =>
+    request<{ tagged: number }>(
+      `${BASE}/influencers/bulk-tag`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ influencer_ids: influencerIds, tag_name: tagName }),
+      },
+    ),
+
+  bulkUpdateStatus: (campaignIds: string[], status: PipelineStage) =>
+    request<{ updated: number }>(
+      `${BASE}/campaigns/bulk-status`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaign_ids: campaignIds, status }),
+      },
+    ),
 }

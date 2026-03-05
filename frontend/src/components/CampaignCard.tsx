@@ -6,6 +6,8 @@ interface CampaignCardProps {
   onStatusChange: (campaignId: string, status: PipelineStage) => Promise<void>
   onNotesChange: (campaignId: string, notes: string) => Promise<void>
   onMessageChange: (campaignId: string, message: string) => Promise<void>
+  selected?: boolean
+  onToggleSelect?: (campaignId: string) => void
 }
 
 function timeAgo(dateStr: string): string {
@@ -19,7 +21,7 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`
 }
 
-export default function CampaignCard({ campaign, onStatusChange, onNotesChange, onMessageChange }: CampaignCardProps) {
+export default function CampaignCard({ campaign, onStatusChange, onNotesChange, onMessageChange, selected, onToggleSelect }: CampaignCardProps) {
   const [notesValue, setNotesValue] = useState(campaign.notes ?? '')
   const [messageValue, setMessageValue] = useState(campaign.generated_message ?? '')
   const [editingMessage, setEditingMessage] = useState(false)
@@ -62,10 +64,18 @@ export default function CampaignCard({ campaign, onStatusChange, onNotesChange, 
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 space-y-2">
+    <div className={`bg-white rounded-lg shadow-sm border p-3 space-y-2 ${selected ? 'border-blue-400 ring-1 ring-blue-200' : 'border-gray-200'}`}>
       {/* Header */}
       <div className="flex items-start justify-between">
-        <div>
+        <div className="flex items-center gap-2">
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={() => onToggleSelect(campaign.id)}
+              className="cursor-pointer"
+            />
+          )}
           <a
             href={campaign.influencer_url}
             target="_blank"

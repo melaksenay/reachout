@@ -24,7 +24,11 @@ python tiktok_sessions/setup_sesssion.py
 cd frontend && npm run dev    # Vite dev server at localhost:5173
 ```
 
-**No test framework or linter is currently configured.**
+**Run backend tests:**
+
+```bash
+pytest tests/ -v
+```
 
 ## Architecture
 

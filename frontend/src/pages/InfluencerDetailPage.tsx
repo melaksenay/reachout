@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, type InfluencerDetail, type InfluencerNote, type Tag } from '../lib/api'
+import { api, type InfluencerDetail, type Tag } from '../lib/api'
 
 export default function InfluencerDetailPage() {
   const { id } = useParams<{ id: string }>()

@@ -2,7 +2,7 @@ from typing import List, Optional
 import uuid
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlmodel import Session, select, desc
+from sqlmodel import Session, select, desc, col
 
 from app.db.session import get_db
 from app.services.discovery import TikTokDiscovery
@@ -29,14 +29,14 @@ async def get_all_influencers(
     if platform:
         statement = statement.where(Influencer.platform == platform)
     if min_followers is not None:
-        statement = statement.where(Influencer.follower_count >= min_followers)
+        statement = statement.where(col(Influencer.follower_count) >= min_followers)
     if max_followers is not None:
-        statement = statement.where(Influencer.follower_count <= max_followers)
+        statement = statement.where(col(Influencer.follower_count) <= max_followers)
     if tag:
         statement = (
             statement
-            .join(InfluencerTag, InfluencerTag.influencer_id == Influencer.id)
-            .join(Tag, Tag.id == InfluencerTag.tag_id)
+            .join(InfluencerTag, col(InfluencerTag.influencer_id) == col(Influencer.id))
+            .join(Tag, col(Tag.id) == col(InfluencerTag.tag_id))
             .where(Tag.name == tag)
         )
 

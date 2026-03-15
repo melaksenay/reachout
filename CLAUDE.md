@@ -56,19 +56,26 @@ Layered FastAPI monolith for influencer discovery and outreach. On startup, `Tik
 | POST   | `/api/v1/influencers/bulk-delete`                | Bulk delete influencers (cascades campaigns, notes, tags)       |
 | POST   | `/api/v1/influencers/bulk-tag`                   | Bulk tag influencers                                            |
 | POST   | `/api/v1/discover?niche=&platform=&search_type=` | Discover influencers (search_type: user, video, hashtag)        |
-| POST   | `/api/v1/campaigns/{influencer_id}/draft`        | Create outreach campaign draft                                  |
+| POST   | `/api/v1/campaigns/{influencer_id}/draft`        | Create outreach campaign draft (requires brand_description set) |
 | PATCH  | `/api/v1/campaigns/{id}/status`                  | Update campaign status (Kanban board)                           |
 | PATCH  | `/api/v1/campaigns/{id}/message`                 | Update AI-generated outreach message                            |
+| PATCH  | `/api/v1/campaigns/{id}/notes`                   | Update campaign notes                                           |
 | POST   | `/api/v1/campaigns/bulk-draft`                   | Bulk draft campaigns for multiple influencers                   |
 | PATCH  | `/api/v1/campaigns/bulk-status`                  | Bulk update campaign statuses                                   |
 | GET    | `/api/v1/campaigns`                              | List all campaigns (with influencer data for Kanban)            |
 | GET    | `/api/v1/tags`                                   | List all tags                                                   |
 | POST   | `/api/v1/generate-message/{campaign_id}`         | Generate AI outreach message via Claude API                     |
+| GET    | `/api/v1/dashboard`                              | Analytics: totals, campaigns by status, response rate, recent  |
+| GET    | `/api/v1/settings`                               | Get user settings (brand description)                           |
+| PATCH  | `/api/v1/settings`                               | Update user settings (brand description)                        |
 
 Route files:
 
-- **`app/api/endpoints.py`** — Discovery, influencer listing, bulk ops, campaigns, tags, AI message generation.
+- **`app/api/endpoints.py`** — Discovery, influencer listing, bulk ops, tags, AI message generation.
+- **`app/api/campaigns.py`** — Campaign CRUD, draft, bulk-draft, status/message/notes updates.
 - **`app/api/influencer_detail.py`** — Single-influencer detail, refresh, notes, tags CRUD.
+- **`app/api/dashboard.py`** — Analytics dashboard aggregates.
+- **`app/api/settings.py`** — User settings (brand description) read/write.
 
 ### Scraping Flow
 
@@ -95,6 +102,7 @@ PostgreSQL via Supabase. Tables in `public` schema:
 - **`influencer_note`** — `id` (UUID PK), `influencer_id` (FK → influencer, CASCADE), `body`, `created_at`
 - **`tag`** — `id` (UUID PK), `name` (unique)
 - **`influencer_tag`** — `influencer_id` + `tag_id` (composite PK, both CASCADE)
+- **`user_settings`** — `id` (UUID PK), `key` (unique, currently always `"default"`), `brand_description`, `created_at`, `updated_at`
 
 All FKs use `ondelete="CASCADE"` — deleting an influencer cleans up campaigns, notes, and tag links automatically.
 

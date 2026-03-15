@@ -10,6 +10,11 @@ wheels/
 .venv
 .env
 
+#Session
 tiktok_sessions
 
+#Misc
 README_private.md
+system-design.md
+presentation.md
+presentation.md

@@ -1,5 +1,6 @@
 # app/services/ai_outreach.py
 import anthropic
+from anthropic.types import TextBlock
 from app.core.config import get_settings
 from app.models.influencer import Influencer
 
@@ -41,4 +42,7 @@ Write a short, genuine, conversational DM (3-4 sentences max). Do not be generic
             max_tokens=300,
             messages=[{"role": "user", "content": prompt}],
         )
-        return message.content[0].text.strip()
+        for block in message.content:
+            if isinstance(block, TextBlock):
+                return block.text.strip()
+        return ""

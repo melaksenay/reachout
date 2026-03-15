@@ -1,6 +1,6 @@
 # app/api/dashboard.py
 from fastapi import APIRouter, Depends
-from sqlmodel import Session, select, desc, func
+from sqlmodel import Session, col, select, desc, func
 
 from app.db.session import get_db
 from app.models.influencer import Influencer
@@ -38,7 +38,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     # Recent 5 campaigns with influencer info
     recent_rows = db.exec(
         select(OutreachCampaign, Influencer)
-        .join(Influencer, OutreachCampaign.influencer_id == Influencer.id)
+        .join(Influencer, col(OutreachCampaign.influencer_id) == col(Influencer.id))
         .order_by(desc(OutreachCampaign.last_updated))
         .limit(5)
     ).all()

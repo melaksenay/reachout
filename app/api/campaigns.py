@@ -2,7 +2,7 @@
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select, desc
+from sqlmodel import Session, select, desc, col
 import uuid
 
 from app.db.session import get_db
@@ -31,7 +31,7 @@ def get_all_campaigns(
 ):
     statement = (
         select(OutreachCampaign, Influencer)
-        .join(Influencer, OutreachCampaign.influencer_id == Influencer.id)
+        .join(Influencer, col(OutreachCampaign.influencer_id) == col(Influencer.id))
         .order_by(desc(OutreachCampaign.last_updated))
     )
     if status:

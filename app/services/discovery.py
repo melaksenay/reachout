@@ -30,7 +30,7 @@ class TikTokDiscovery:
 
             TikTokDiscovery._context = await TikTokDiscovery._playwright.chromium.launch_persistent_context(
                 self.session_path,
-                headless=True,
+                headless=False,
                 args=["--disable-blink-features=AutomationControlled"],
             )
             return TikTokDiscovery._context

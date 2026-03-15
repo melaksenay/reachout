@@ -1,7 +1,7 @@
 # app/api/influencer_detail.py
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select, desc
+from sqlmodel import Session, select, desc, col
 import uuid
 
 from app.db.session import get_db
@@ -44,7 +44,7 @@ def get_influencer_detail(
     # Get tags via join table
     tag_rows = db.exec(
         select(Tag)
-        .join(InfluencerTag, InfluencerTag.tag_id == Tag.id)
+        .join(InfluencerTag, col(InfluencerTag.tag_id) == col(Tag.id))
         .where(InfluencerTag.influencer_id == influencer_id)
     ).all()
 

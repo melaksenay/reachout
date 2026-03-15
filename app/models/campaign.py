@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from app.models.influencer import Influencer
 
 VALID_STATUSES = [
-    "discovered", "drafted", "sent", "replied",
+    "drafted", "sent", "replied",
     "negotiating", "closed", "rejected"
 ]
 
@@ -19,7 +19,7 @@ class OutreachCampaign(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     influencer_id: uuid.UUID = Field(foreign_key="influencer.id", ondelete="CASCADE")
-    status: str = Field(default="discovered")
+    status: str = Field(default="drafted")
     generated_message: Optional[str] = None
     last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status_updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -30,7 +30,7 @@ export interface CampaignWithInfluencer extends OutreachCampaign {
 }
 
 export const PIPELINE_STAGES = [
-  'discovered', 'drafted', 'sent', 'replied',
+  'drafted', 'sent', 'replied',
   'negotiating', 'closed', 'rejected',
 ] as const
 export type PipelineStage = typeof PIPELINE_STAGES[number]

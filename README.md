@@ -6,7 +6,7 @@ A full-stack platform for discovering micro-influencers on TikTok and managing o
 
 - **Influencer Discovery** -- Search TikTok by username, video content, or hashtag to find creators in any niche
 - **AI Outreach** -- Generate personalized outreach messages using the Claude API, with one-click editing
-- **Campaign Pipeline** -- Kanban board to track outreach status (discovered, drafted, sent, replied, negotiating, closed, rejected)
+- **Campaign Pipeline** -- Kanban board to track outreach status (drafted, sent, replied, negotiating, closed, rejected)
 - **Influencer Management** -- Save, tag, filter, and bulk-manage your influencer list
 - **Notes and Tags** -- Add notes and tags to influencers for organization and filtering
 - **Profile Refresh** -- Re-scrape TikTok profiles on demand for up-to-date bios and follower counts

@@ -133,7 +133,7 @@ Frontend env vars in `frontend/.env.local`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_
 
 ## Campaign Statuses
 
-Valid statuses: `discovered`, `drafted`, `sent`, `replied`, `negotiating`, `closed`, `rejected`. Defined in `app/models/campaign.py:VALID_STATUSES`.
+Valid statuses: `drafted`, `sent`, `replied`, `negotiating`, `closed`, `rejected`. Defined in `app/models/campaign.py:VALID_STATUSES`. Default status for new campaigns is `drafted`.
 
 ## Completed Feature Phases
 

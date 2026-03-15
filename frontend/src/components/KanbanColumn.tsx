@@ -12,7 +12,6 @@ interface KanbanColumnProps {
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  discovered: 'bg-gray-100 text-gray-700',
   drafted: 'bg-blue-100 text-blue-700',
   sent: 'bg-yellow-100 text-yellow-700',
   replied: 'bg-green-100 text-green-700',

@@ -1,4 +1,6 @@
 from typing import List, Optional
+import json
+import logging
 import uuid
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -9,6 +11,9 @@ from app.services.discovery import TikTokDiscovery
 from app.models.influencer import Influencer
 from app.models.tag import Tag, InfluencerTag
 from app.core.auth import get_current_user_id
+from app.core.cache import get_redis, invalidate_cache, _CacheEncoder
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user_id)])
 
@@ -24,6 +29,20 @@ async def get_all_influencers(
     tag: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    # Only cache the unfiltered base list
+    has_filters = any([platform, min_followers is not None, max_followers is not None, tag])
+    r = get_redis()
+
+    if not has_filters and r is not None:
+        try:
+            hit = r.get("cache:influencers")  # type: ignore[arg-type]
+            if hit is not None:
+                logger.info("CACHE HIT [influencers]: serving from Redis")
+                return json.loads(hit)
+            logger.info("CACHE MISS [influencers]: fetching from DB")
+        except Exception:
+            logger.warning("Redis GET failed for influencers, falling through to DB")
+
     statement = select(Influencer)
 
     if platform:
@@ -42,7 +61,16 @@ async def get_all_influencers(
 
     statement = statement.order_by(desc(Influencer.created_at))
     results = db.exec(statement).all()
-    return [r.model_dump(exclude={"campaigns"}) for r in results]
+    result = [row.model_dump(exclude={"campaigns"}) for row in results]
+
+    if not has_filters and r is not None:
+        try:
+            r.setex("cache:influencers", 30, json.dumps(result, cls=_CacheEncoder))
+            logger.info("CACHE SET [influencers]: stored with TTL=30s")
+        except Exception:
+            logger.warning("Redis SET failed for influencers, response served uncached")
+
+    return result
 
 # Setting response_model automatically serializes the output and filters internal fields
 @router.post("/discover")
@@ -85,7 +113,8 @@ async def discover_influencers(
         # 5. Refresh loads the database-generated UUIDs and default values back into the Python objects
         for influencer in new_influencers:
             db.refresh(influencer)
-            
+        invalidate_cache("dashboard", "influencers")
+
     return [i.model_dump(exclude={"campaigns"}) for i in saved_influencers]
 
 
@@ -105,6 +134,7 @@ def bulk_delete(
             db.delete(influencer)
             deleted += 1
     db.commit()
+    invalidate_cache("dashboard", "influencers")
     return {"deleted": deleted}
 
 
@@ -140,4 +170,5 @@ def bulk_tag(
             tagged += 1
 
     db.commit()
+    invalidate_cache("tags", "influencers")
     return {"tagged": tagged}

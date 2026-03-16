@@ -6,11 +6,13 @@ from app.db.session import get_db
 from app.models.influencer import Influencer
 from app.models.campaign import OutreachCampaign, CampaignWithInfluencer, VALID_STATUSES
 from app.core.auth import get_current_user_id
+from app.core.cache import cached
 
 router = APIRouter(dependencies=[Depends(get_current_user_id)])
 
 
 @router.get("/dashboard")
+@cached("dashboard", ttl_seconds=60)
 def get_dashboard(db: Session = Depends(get_db)):
     # Total influencers
     total_influencers = db.exec(

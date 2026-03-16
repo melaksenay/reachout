@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     ANTHROPIC_API_KEY: str = ""
     SUPABASE_JWT_SECRET: str = ""
+    REDIS_URL: str = ""
 
 # Instantiate the settings object to be imported by other files
 @lru_cache()

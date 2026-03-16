@@ -20,6 +20,11 @@ from app.models.user_settings import UserSettings
 from app.services.discovery import TikTokDiscovery
 from app.services.ai_outreach import AIOutreachService
 from app.core.auth import get_current_user_id
+import json
+import logging
+from app.core.cache import get_redis, invalidate_cache, _CacheEncoder
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user_id)])
 
@@ -29,6 +34,19 @@ def get_all_campaigns(
     status: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    # Only cache the unfiltered base list
+    r = get_redis()
+
+    if not status and r is not None:
+        try:
+            hit = r.get("cache:campaigns")  # type: ignore[arg-type]
+            if hit is not None:
+                logger.info("CACHE HIT [campaigns]: serving from Redis")
+                return json.loads(hit)
+            logger.info("CACHE MISS [campaigns]: fetching from DB")
+        except Exception:
+            logger.warning("Redis GET failed for campaigns, falling through to DB")
+
     statement = (
         select(OutreachCampaign, Influencer)
         .join(Influencer, col(OutreachCampaign.influencer_id) == col(Influencer.id))
@@ -37,7 +55,7 @@ def get_all_campaigns(
     if status:
         statement = statement.where(OutreachCampaign.status == status)
     rows = db.exec(statement).all()
-    return [
+    result = [
         CampaignWithInfluencer(
             id=campaign.id,
             influencer_id=campaign.influencer_id,
@@ -53,6 +71,15 @@ def get_all_campaigns(
         )
         for campaign, inf in rows
     ]
+
+    if not status and r is not None:
+        try:
+            r.setex("cache:campaigns", 60, json.dumps(result, cls=_CacheEncoder))
+            logger.info("CACHE SET [campaigns]: stored with TTL=60s")
+        except Exception:
+            logger.warning("Redis SET failed for campaigns, response served uncached")
+
+    return result
 
 
 @router.patch("/campaigns/{campaign_id}/status", response_model=OutreachCampaign)
@@ -70,6 +97,7 @@ def update_campaign_status(
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
+    invalidate_cache("dashboard", "campaigns")
     return campaign
 
 
@@ -87,6 +115,7 @@ def update_campaign_notes(
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
+    invalidate_cache("campaigns")
     return campaign
 
 
@@ -104,6 +133,7 @@ def update_campaign_message(
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
+    invalidate_cache("campaigns")
     return campaign
 
 
@@ -153,6 +183,7 @@ async def draft_campaign(
     db.add(new_campaign)
     db.commit()
     db.refresh(new_campaign)
+    invalidate_cache("dashboard", "campaigns")
 
     return new_campaign
 
@@ -219,6 +250,7 @@ async def bulk_draft(
         db.refresh(campaign)
         results.append(campaign)
 
+    invalidate_cache("dashboard", "campaigns")
     return results
 
 
@@ -239,4 +271,5 @@ def bulk_update_status(
         db.add(campaign)
         updated += 1
     db.commit()
+    invalidate_cache("dashboard", "campaigns")
     return {"updated": updated}

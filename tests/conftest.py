@@ -1,5 +1,6 @@
 import pytest
 import pytest_asyncio
+from unittest.mock import patch
 from sqlmodel import SQLModel, Session, create_engine
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
@@ -78,8 +79,12 @@ async def client(db):
     app.dependency_overrides[detail_get_scraper] = _FakeScraper
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+    # Disable Redis in tests so cached endpoints always hit the test DB
+    with patch("app.core.cache.get_redis", return_value=None), \
+         patch("app.api.endpoints.get_redis", return_value=None), \
+         patch("app.api.campaigns.get_redis", return_value=None):
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
 
     app.dependency_overrides.clear()
 

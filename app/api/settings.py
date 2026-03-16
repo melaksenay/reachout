@@ -6,11 +6,13 @@ from sqlmodel import Session, select
 from app.db.session import get_db
 from app.models.user_settings import UserSettings, UserSettingsUpdate
 from app.core.auth import get_current_user_id
+from app.core.cache import cached, invalidate_cache
 
 router = APIRouter(dependencies=[Depends(get_current_user_id)])
 
 
 @router.get("/settings")
+@cached("settings", ttl_seconds=600)
 def get_settings(db: Session = Depends(get_db)):
     settings = db.exec(
         select(UserSettings).where(UserSettings.key == "default")
@@ -35,4 +37,5 @@ def update_settings(
     db.add(settings)
     db.commit()
     db.refresh(settings)
+    invalidate_cache("settings")
     return settings

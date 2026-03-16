@@ -1,9 +1,12 @@
 # app/main.py
 import asyncio
+import logging
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from sqlmodel import SQLModel
 from app.db.session import engine
+
+logging.getLogger("app").setLevel(logging.INFO)
 
 # You MUST import your models here so SQLModel knows about them before create_all()
 from app.models.influencer import Influencer
@@ -18,12 +21,16 @@ from app.api.settings import router as settings_router
 from app.api.influencer_detail import router as influencer_detail_router
 from app.api.dashboard import router as dashboard_router
 from app.services.discovery import TikTokDiscovery
+from app.core.cache import get_redis
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Create tables if they don't exist
     SQLModel.metadata.create_all(engine)
     print("✅ Database tables created or verified successfully.")
+
+    # Eagerly connect to Redis so we get immediate feedback
+    get_redis()
 
     # Warm up TikTok session in background (refreshes cookies, doesn't save data)
     asyncio.create_task(TikTokDiscovery().warm_up())

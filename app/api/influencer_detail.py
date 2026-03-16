@@ -10,6 +10,7 @@ from app.models.campaign import OutreachCampaign
 from app.models.influencer_note import InfluencerNote, NoteCreate
 from app.models.tag import Tag, InfluencerTag, TagCreate
 from app.core.auth import get_current_user_id
+from app.core.cache import cached, invalidate_cache
 from app.services.discovery import TikTokDiscovery
 
 router = APIRouter(dependencies=[Depends(get_current_user_id)])
@@ -78,6 +79,7 @@ async def refresh_profile(
     db.add(influencer)
     db.commit()
     db.refresh(influencer)
+    invalidate_cache("influencers")
     return influencer.model_dump(exclude={"campaigns"})
 
 
@@ -117,6 +119,7 @@ def delete_note(
 # --- Tags ---
 
 @router.get("/tags")
+@cached("tags", ttl_seconds=300)
 def list_tags(db: Session = Depends(get_db)):
     return db.exec(select(Tag).order_by(Tag.name)).all()
 
@@ -138,6 +141,7 @@ def add_tag(
         db.add(tag)
         db.commit()
         db.refresh(tag)
+        invalidate_cache("tags")
 
     # Check if already assigned
     existing = db.exec(
@@ -171,4 +175,5 @@ def remove_tag(
         raise HTTPException(status_code=404, detail="Tag not assigned")
     db.delete(link)
     db.commit()
+    invalidate_cache("tags")
     return {"ok": True}

@@ -41,6 +41,7 @@ Layered FastAPI monolith for influencer discovery and outreach. On startup, `Tik
 - **`app/services/`** — Business logic. `TikTokDiscovery` does Playwright-based TikTok scraping with stealth (user/video/hashtag search modes); `OutreachService` generates AI outreach messages via Claude API.
 - **`app/models/`** — SQLModel classes (dual ORM table definitions + Pydantic response models).
 - **`app/core/config.py`** — Pydantic Settings singleton (loaded from `.env` via `lru_cache`).
+- **`app/core/cache.py`** — Redis cache-aside layer. Provides `get_redis()` client, `@cached` decorator, `invalidate_cache()` helper, and a custom JSON encoder for SQLModel/Pydantic objects.
 - **`app/db/session.py`** — Synchronous SQLModel/SQLAlchemy engine and `get_db()` generator for request-scoped sessions.
 
 ### API Routes
@@ -108,9 +109,32 @@ All FKs use `ondelete="CASCADE"` — deleting an influencer cleans up campaigns,
 
 Tables are auto-created via SQLModel metadata at startup. Schema changes should be made directly via the Supabase dashboard or SQL editor.
 
+## Caching (Redis)
+
+Cache-aside pattern using Redis with graceful degradation — the app works without Redis (all cache operations are no-ops).
+
+- **`app/core/cache.py`** — Core module. `get_redis()` lazily initializes a Redis client (eagerly called at startup for immediate feedback). `@cached` decorator for simple endpoints; inline cache logic for endpoints with conditional caching.
+- Redis is optional: set `REDIS_URL` in `.env` to enable. If unset or Redis is unreachable, the app falls through to the database.
+
+### Cached Endpoints
+
+| Endpoint | Cache Key | TTL | Pattern |
+|---|---|---|---|
+| `GET /dashboard` | `cache:dashboard` | 60s | `@cached` decorator |
+| `GET /tags` | `cache:tags` | 300s | `@cached` decorator |
+| `GET /settings` | `cache:settings` | 600s | `@cached` decorator |
+| `GET /influencers` (unfiltered) | `cache:influencers` | 30s | Inline (skips cache when filters applied) |
+| `GET /campaigns` (unfiltered) | `cache:campaigns` | 60s | Inline (skips cache when status filter applied) |
+
+### Invalidation
+
+Every mutation endpoint calls `invalidate_cache()` with the relevant keys. For example, drafting a campaign invalidates both `"dashboard"` and `"campaigns"`. Tests patch `get_redis` to return `None` so no real Redis is needed.
+
 ## Environment Variables
 
 Required in `.env`: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `MY_HANDLE` (your TikTok handle, filtered from search results), `ANTHROPIC_API_KEY` (for AI outreach message generation).
+
+Optional: `REDIS_URL` (e.g. `redis://localhost:6379`) — enables Redis caching layer. If unset, caching is disabled and the app queries the database directly.
 
 ### Frontend
 
@@ -127,7 +151,7 @@ Frontend env vars in `frontend/.env.local`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_
 
 ## Key Dependencies
 
-**Backend:** Python 3.11, FastAPI, SQLModel, psycopg2, Playwright, playwright-stealth, crawlee, pydantic-settings, anthropic (Claude API). Package manager: `uv`.
+**Backend:** Python 3.11, FastAPI, SQLModel, psycopg2, Playwright, playwright-stealth, crawlee, pydantic-settings, anthropic (Claude API), redis-py. Package manager: `uv`.
 
 **Frontend:** React, TypeScript, Vite, Tailwind CSS, React Router, @supabase/supabase-js. Package manager: `npm`.
 
@@ -144,3 +168,4 @@ Valid statuses: `drafted`, `sent`, `replied`, `negotiating`, `closed`, `rejected
 - **P4** — JWT auth with Supabase (backend middleware + frontend bearer tokens)
 - **P5** — Video & hashtag discovery modes (TikTok content-based search)
 - **P6** — Dashboard / analytics
+- **P7** — Redis caching layer (cache-aside with graceful degradation)

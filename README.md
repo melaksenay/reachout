@@ -11,6 +11,7 @@ A full-stack platform for discovering micro-influencers on TikTok and managing o
 - **Notes and Tags** -- Add notes and tags to influencers for organization and filtering
 - **Profile Refresh** -- Re-scrape TikTok profiles on demand for up-to-date bios and follower counts
 - **Authentication** -- Email/password auth via Supabase with JWT-protected API endpoints
+- **Redis Caching** -- Cache-aside layer with per-endpoint TTLs and automatic invalidation on writes; gracefully degrades without Redis
 
 ## Tech Stack
 
@@ -19,7 +20,8 @@ A full-stack platform for discovering micro-influencers on TikTok and managing o
 | Python 3.11, FastAPI | React 19, TypeScript |
 | SQLModel (ORM) | Vite, Tailwind CSS |
 | PostgreSQL (Supabase) | React Router |
-| Playwright (stealth scraping) | Supabase Auth |
+| Redis (caching) | Supabase Auth |
+| Playwright (stealth scraping) | |
 | Claude API (AI messages) | |
 
 ## Getting Started
@@ -46,6 +48,8 @@ uvicorn app.main:app --reload
 ```
 
 Required environment variables: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_JWT_SECRET`, `ANTHROPIC_API_KEY`, `MY_HANDLE`
+
+Optional: `REDIS_URL` (e.g. `redis://localhost:6379`) for caching
 
 ### Frontend
 
@@ -79,7 +83,7 @@ The Vite dev server proxies `/api` requests to `localhost:8000`.
 pytest tests/ -v
 ```
 
-31 tests covering API endpoints, model validation, service logic, and cascade deletes. Tests use an in-memory SQLite database with mocked auth and scraper -- no external services required.
+39 tests covering API endpoints, model validation, service logic, cache behavior, and cascade deletes. Tests use an in-memory SQLite database with mocked auth, scraper, and Redis -- no external services required.
 
 ## CI/CD
 

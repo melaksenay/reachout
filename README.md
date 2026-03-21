@@ -26,45 +26,43 @@ A full-stack platform for discovering micro-influencers on TikTok and managing o
 
 ## Getting Started
 
-### Prerequisites
+### Option A: Docker (recommended)
 
-- Python 3.11+
-- Node.js 20+
-- [uv](https://docs.astral.sh/uv/) (Python package manager)
-- A Supabase project (for database and auth)
-- Anthropic API key (for AI outreach messages)
-
-### Backend
+Runs all four services (Postgres, Redis, backend, frontend) with one command. No local Python or Node setup required.
 
 ```bash
-# Install dependencies
-uv sync
-
-# Create .env with required variables
-cp .env.example .env  # then fill in values
-
-# Run the server
-uvicorn app.main:app --reload
+cp .env.example .env  # fill in Supabase + Anthropic keys
+docker compose up --build
 ```
 
-Required environment variables: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_JWT_SECRET`, `ANTHROPIC_API_KEY`, `MY_HANDLE`
+Open `http://localhost:3000`.
 
-Optional: `REDIS_URL` (e.g. `redis://localhost:6379`) for caching
+### Option B: Local dev
 
-### Frontend
+**Prerequisites:** Python 3.11+, Node.js 20+, [uv](https://docs.astral.sh/uv/), a Supabase project, Anthropic API key.
 
 ```bash
+# Backend
+uv sync
+cp .env.example .env  # fill in values
+uvicorn app.main:app --reload
+
+# Frontend (separate terminal)
 cd frontend
 npm install
-
-# Create .env.local with Supabase credentials
-echo "VITE_SUPABASE_URL=your_url" > .env.local
-echo "VITE_SUPABASE_PUBLISHABLE_KEY=your_key" >> .env.local
-
+# Create frontend/.env.local with VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY
 npm run dev
 ```
 
-The Vite dev server proxies `/api` requests to `localhost:8000`.
+Backend runs at `localhost:8000`, frontend at `localhost:5173` (Vite proxies `/api` to the backend).
+
+### Environment Variables
+
+**Backend (`.env`):** `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_JWT_SECRET`, `ANTHROPIC_API_KEY`, `MY_HANDLE`
+
+Optional: `REDIS_URL` (e.g. `redis://localhost:6379`) — enables caching layer.
+
+**Frontend (`frontend/.env.local`):** `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
 
 ## API Overview
 

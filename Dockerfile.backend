@@ -1,0 +1,28 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps for psycopg2 (libpq-dev) and building C extensions (gcc)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libc-dev libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install uv package manager
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Install Python dependencies (cached layer — only rebuilds when lock changes)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --no-dev --frozen
+
+# Install Playwright + Chromium (required for TikTok scraping)
+RUN uv run playwright install --with-deps chromium
+
+# Copy application source
+COPY app/ app/
+
+# Directory for persistent TikTok browser cookies (volume-mounted in compose)
+RUN mkdir -p /app/tiktok_sessions
+
+EXPOSE 8000
+
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

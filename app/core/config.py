@@ -9,9 +9,8 @@ class Settings(BaseSettings):
     SUPABASE_PUBLISHABLE_KEY: str = ""
     SUPABASE_SECRET_KEY: str = ""
     MY_HANDLE: str = ""  # TikTok handle for filtering out myself
-    SUPABASE_AUTH_REDIRECT: str = ""  # OAuth redirect URL (planned)
     # model_config tells Pydantic exactly how to load the variables
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
     ANTHROPIC_API_KEY: str = ""
     SUPABASE_JWT_SECRET: str = ""
     REDIS_URL: str = ""

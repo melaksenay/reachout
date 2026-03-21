@@ -27,7 +27,16 @@ cd frontend && npm run dev    # Vite dev server at localhost:5173
 **Run backend tests:**
 
 ```bash
-pytest tests/ -v
+pytest tests/ -v                                    # all tests
+pytest tests/test_campaigns.py -v                   # single file
+pytest tests/test_campaigns.py::test_name -v        # single test
+```
+
+**Lint and build the frontend:**
+
+```bash
+cd frontend && npm run lint    # ESLint (typescript-eslint + react-hooks)
+cd frontend && npm run build   # production build to frontend/dist/
 ```
 
 ## Architecture
@@ -107,7 +116,7 @@ PostgreSQL via Supabase. Tables in `public` schema:
 
 All FKs use `ondelete="CASCADE"` — deleting an influencer cleans up campaigns, notes, and tag links automatically.
 
-Tables are auto-created via SQLModel metadata at startup. Schema changes should be made directly via the Supabase dashboard or SQL editor.
+Tables are auto-created via SQLModel metadata at startup. Schema changes should be made directly via the Supabase dashboard or SQL editor. There is no migration tool (no Alembic).
 
 ## Caching (Redis)
 
@@ -128,26 +137,50 @@ Cache-aside pattern using Redis with graceful degradation — the app works with
 
 ### Invalidation
 
-Every mutation endpoint calls `invalidate_cache()` with the relevant keys. For example, drafting a campaign invalidates both `"dashboard"` and `"campaigns"`. Tests patch `get_redis` to return `None` so no real Redis is needed.
+Every mutation endpoint calls `invalidate_cache()` with the relevant keys. For example, drafting a campaign invalidates both `"dashboard"` and `"campaigns"`.
+
+### Test Infrastructure
+
+Tests use an in-memory SQLite database (not Postgres) with `StaticPool` and `PRAGMA foreign_keys=ON`. Key fixtures in `tests/conftest.py`:
+
+- `db` — fresh per-test SQLite session (tables created/dropped around each test)
+- `client` — `AsyncClient` with overridden `get_db`, `get_current_user_id` (→ `"test-user-id"`), `get_scraper` (→ stub, no browser), and `get_redis` (→ `None`)
+- `sample_influencer` — pre-inserted test influencer
+
+No real Redis, Playwright browser, or Supabase auth is needed to run tests.
 
 ## Environment Variables
 
-Required in `.env`: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `MY_HANDLE` (your TikTok handle, filtered from search results), `ANTHROPIC_API_KEY` (for AI outreach message generation).
+**Backend (`.env`):**
 
-Optional: `REDIS_URL` (e.g. `redis://localhost:6379`) — enables Redis caching layer. If unset, caching is disabled and the app queries the database directly.
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL connection string (Supabase in prod, local container for Docker) |
+| `SUPABASE_URL` | Yes | Supabase project URL |
+| `SUPABASE_PUBLISHABLE_KEY` | Yes | Supabase anon/public key |
+| `SUPABASE_SECRET_KEY` | Yes | Supabase service role key |
+| `SUPABASE_JWT_SECRET` | Yes | JWT secret for validating auth tokens |
+| `MY_HANDLE` | Yes | Your TikTok handle (filtered from search results) |
+| `ANTHROPIC_API_KEY` | Yes | Claude API key for AI message generation |
+| `REDIS_URL` | No | e.g. `redis://localhost:6379` — enables caching; app works without it |
+
+**Frontend (`.env.local`):**
+
+| Variable | Required | Description |
+|---|---|---|
+| `VITE_SUPABASE_URL` | Yes | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Yes | Supabase anon/public key |
 
 ### Frontend
 
 React + TypeScript + Tailwind CSS app in `frontend/`. Separate `package.json` from root.
 
-- **`frontend/vite.config.ts`** — Vite dev proxy forwards `/api` requests to `localhost:8000` (avoids CORS without backend changes).
+- **`frontend/vite.config.ts`** — Vite dev proxy forwards `/api` requests to `localhost:8000` (avoids CORS in local dev).
+- **`frontend/src/lib/api.ts`** — Typed fetch wrappers. `BASE` is `/api/v1` (relative URL, works via Vite proxy in local dev and nginx in Docker).
 - **`frontend/src/lib/supabaseClient.ts`** — Supabase client singleton (auth only, no data queries).
-- **`frontend/src/lib/api.ts`** — Typed fetch wrappers for all FastAPI endpoints.
 - **`frontend/src/context/AuthContext.tsx`** — Global auth state via Supabase email/password auth.
 - **`frontend/src/components/ProtectedRoute.tsx`** — Redirects unauthenticated users to `/login`.
-- **`frontend/src/pages/`** — LoginPage, SignUpPage, InfluencersPage (list + bulk actions), InfluencerDetailPage (profile, notes, tags), DiscoverPage (user/video/hashtag search), CampaignsPage (Kanban board).
-
-Frontend env vars in `frontend/.env.local`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (pointing to remote Supabase).
+- **`frontend/src/pages/`** — LoginPage, SignUpPage, DashboardPage, InfluencersPage (list + bulk actions), InfluencerDetailPage (profile, notes, tags), DiscoverPage (user/video/hashtag search), CampaignsPage (Kanban board), SettingsPage (brand description).
 
 ## Key Dependencies
 
@@ -159,6 +192,22 @@ Frontend env vars in `frontend/.env.local`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_
 
 Valid statuses: `drafted`, `sent`, `replied`, `negotiating`, `closed`, `rejected`. Defined in `app/models/campaign.py:VALID_STATUSES`. Default status for new campaigns is `drafted`.
 
+## Docker
+
+`docker-compose.yml` runs all four services locally with one command:
+
+```bash
+docker compose up --build
+```
+
+Services:
+- **postgres** — local Postgres (data persisted in `pgdata` named volume)
+- **redis** — local Redis
+- **backend** — built from `Dockerfile.backend`; connects to postgres/redis via Docker internal DNS
+- **frontend** — built from `frontend/Dockerfile` (multi-stage: Node build → nginx serve); proxies `/api` to backend via `nginx.conf`
+
+Frontend is available at `http://localhost:3000`. nginx handles `/api` proxying to the backend container.
+
 ## Completed Feature Phases
 
 - **P0** — Kanban board for campaign pipeline management
@@ -169,3 +218,4 @@ Valid statuses: `drafted`, `sent`, `replied`, `negotiating`, `closed`, `rejected
 - **P5** — Video & hashtag discovery modes (TikTok content-based search)
 - **P6** — Dashboard / analytics
 - **P7** — Redis caching layer (cache-aside with graceful degradation)
+- **P8** — Docker Compose local dev setup + Vercel/Railway production deployment config

@@ -3,6 +3,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, desc, col
 import uuid
+import json
+import logging
 
 from app.db.session import get_db
 from app.models.influencer import Influencer
@@ -10,8 +12,10 @@ from app.models.campaign import OutreachCampaign
 from app.models.influencer_note import InfluencerNote, NoteCreate
 from app.models.tag import Tag, InfluencerTag, TagCreate
 from app.core.auth import get_current_user_id
-from app.core.cache import cached, invalidate_cache
+from app.core.cache import get_redis, invalidate_cache, _CacheEncoder
 from app.services.discovery import TikTokDiscovery
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user_id)])
 
@@ -24,29 +28,37 @@ def get_scraper() -> TikTokDiscovery:
 @router.get("/influencers/{influencer_id}")
 def get_influencer_detail(
     influencer_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    influencer = db.get(Influencer, influencer_id)
+    influencer = db.exec(
+        select(Influencer).where(Influencer.id == influencer_id, Influencer.user_id == user_id)
+    ).first()
     if not influencer:
         raise HTTPException(status_code=404, detail="Influencer not found")
 
     campaigns = db.exec(
         select(OutreachCampaign)
-        .where(OutreachCampaign.influencer_id == influencer_id)
+        .where(
+            OutreachCampaign.influencer_id == influencer_id,
+            OutreachCampaign.user_id == user_id,
+        )
         .order_by(desc(OutreachCampaign.last_updated))
     ).all()
 
     notes = db.exec(
         select(InfluencerNote)
-        .where(InfluencerNote.influencer_id == influencer_id)
+        .where(
+            InfluencerNote.influencer_id == influencer_id,
+            InfluencerNote.user_id == user_id,
+        )
         .order_by(desc(InfluencerNote.created_at))
     ).all()
 
-    # Get tags via join table
     tag_rows = db.exec(
         select(Tag)
         .join(InfluencerTag, col(InfluencerTag.tag_id) == col(Tag.id))
-        .where(InfluencerTag.influencer_id == influencer_id)
+        .where(InfluencerTag.influencer_id == influencer_id, Tag.user_id == user_id)
     ).all()
 
     return {
@@ -62,10 +74,13 @@ def get_influencer_detail(
 @router.post("/influencers/{influencer_id}/refresh")
 async def refresh_profile(
     influencer_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
     scraper: TikTokDiscovery = Depends(get_scraper),
 ):
-    influencer = db.get(Influencer, influencer_id)
+    influencer = db.exec(
+        select(Influencer).where(Influencer.id == influencer_id, Influencer.user_id == user_id)
+    ).first()
     if not influencer:
         raise HTTPException(status_code=404, detail="Influencer not found")
 
@@ -79,7 +94,7 @@ async def refresh_profile(
     db.add(influencer)
     db.commit()
     db.refresh(influencer)
-    invalidate_cache("influencers")
+    invalidate_cache(f"{user_id}:influencers")
     return influencer.model_dump(exclude={"campaigns"})
 
 
@@ -89,13 +104,16 @@ async def refresh_profile(
 def add_note(
     influencer_id: uuid.UUID,
     body: NoteCreate,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    influencer = db.get(Influencer, influencer_id)
+    influencer = db.exec(
+        select(Influencer).where(Influencer.id == influencer_id, Influencer.user_id == user_id)
+    ).first()
     if not influencer:
         raise HTTPException(status_code=404, detail="Influencer not found")
 
-    note = InfluencerNote(influencer_id=influencer_id, body=body.body)
+    note = InfluencerNote(influencer_id=influencer_id, user_id=user_id, body=body.body)
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -106,10 +124,17 @@ def add_note(
 def delete_note(
     influencer_id: uuid.UUID,
     note_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    note = db.get(InfluencerNote, note_id)
-    if not note or note.influencer_id != influencer_id:
+    note = db.exec(
+        select(InfluencerNote).where(
+            InfluencerNote.id == note_id,
+            InfluencerNote.influencer_id == influencer_id,
+            InfluencerNote.user_id == user_id,
+        )
+    ).first()
+    if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     db.delete(note)
     db.commit()
@@ -119,31 +144,55 @@ def delete_note(
 # --- Tags ---
 
 @router.get("/tags")
-@cached("tags", ttl_seconds=300)
-def list_tags(db: Session = Depends(get_db)):
-    return db.exec(select(Tag).order_by(Tag.name)).all()
+def list_tags(
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    r = get_redis()
+    cache_key = f"cache:{user_id}:tags"
+    if r is not None:
+        try:
+            hit = r.get(cache_key)
+            if hit is not None:
+                logger.info("CACHE HIT [tags]")
+                return json.loads(hit)
+        except Exception:
+            logger.warning("Redis GET failed for tags, falling through to DB")
+
+    tags = db.exec(select(Tag).where(Tag.user_id == user_id).order_by(Tag.name)).all()
+
+    if r is not None:
+        try:
+            r.setex(cache_key, 300, json.dumps(tags, cls=_CacheEncoder))
+        except Exception:
+            logger.warning("Redis SET failed for tags")
+
+    return tags
 
 
 @router.post("/influencers/{influencer_id}/tags")
 def add_tag(
     influencer_id: uuid.UUID,
     body: TagCreate,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    influencer = db.get(Influencer, influencer_id)
+    influencer = db.exec(
+        select(Influencer).where(Influencer.id == influencer_id, Influencer.user_id == user_id)
+    ).first()
     if not influencer:
         raise HTTPException(status_code=404, detail="Influencer not found")
 
-    # Get or create tag
-    tag = db.exec(select(Tag).where(Tag.name == body.name)).first()
+    tag = db.exec(
+        select(Tag).where(Tag.name == body.name, Tag.user_id == user_id)
+    ).first()
     if not tag:
-        tag = Tag(name=body.name)
+        tag = Tag(name=body.name, user_id=user_id)
         db.add(tag)
         db.commit()
         db.refresh(tag)
-        invalidate_cache("tags")
+        invalidate_cache(f"{user_id}:tags")
 
-    # Check if already assigned
     existing = db.exec(
         select(InfluencerTag).where(
             InfluencerTag.influencer_id == influencer_id,
@@ -163,8 +212,15 @@ def add_tag(
 def remove_tag(
     influencer_id: uuid.UUID,
     tag_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
+    tag = db.exec(
+        select(Tag).where(Tag.id == tag_id, Tag.user_id == user_id)
+    ).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+
     link = db.exec(
         select(InfluencerTag).where(
             InfluencerTag.influencer_id == influencer_id,
@@ -175,5 +231,5 @@ def remove_tag(
         raise HTTPException(status_code=404, detail="Tag not assigned")
     db.delete(link)
     db.commit()
-    invalidate_cache("tags")
+    invalidate_cache(f"{user_id}:tags")
     return {"ok": True}

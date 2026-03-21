@@ -27,15 +27,16 @@ async def get_all_influencers(
     min_followers: Optional[int] = None,
     max_followers: Optional[int] = None,
     tag: Optional[str] = None,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    # Only cache the unfiltered base list
     has_filters = any([platform, min_followers is not None, max_followers is not None, tag])
     r = get_redis()
+    cache_key = f"cache:{user_id}:influencers"
 
     if not has_filters and r is not None:
         try:
-            hit = r.get("cache:influencers")  # type: ignore[arg-type]
+            hit = r.get(cache_key)
             if hit is not None:
                 logger.info("CACHE HIT [influencers]: serving from Redis")
                 return json.loads(hit)
@@ -43,7 +44,7 @@ async def get_all_influencers(
         except Exception:
             logger.warning("Redis GET failed for influencers, falling through to DB")
 
-    statement = select(Influencer)
+    statement = select(Influencer).where(Influencer.user_id == user_id)
 
     if platform:
         statement = statement.where(Influencer.platform == platform)
@@ -65,55 +66,54 @@ async def get_all_influencers(
 
     if not has_filters and r is not None:
         try:
-            r.setex("cache:influencers", 30, json.dumps(result, cls=_CacheEncoder))
+            r.setex(cache_key, 30, json.dumps(result, cls=_CacheEncoder))
             logger.info("CACHE SET [influencers]: stored with TTL=30s")
         except Exception:
             logger.warning("Redis SET failed for influencers, response served uncached")
 
     return result
 
-# Setting response_model automatically serializes the output and filters internal fields
+
 @router.post("/discover")
 async def discover_influencers(
     niche: str,
     platform: str = "tiktok",
     search_type: str = "user",
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
     scraper: TikTokDiscovery = Depends(get_scraper)
 ):
-
-    # 1. Fetch raw profiles using the selected search method
     if search_type == "video":
         raw_profiles = await scraper.search_by_videos(query=niche)
     elif search_type == "hashtag":
         raw_profiles = await scraper.search_by_hashtag(hashtag=niche)
     else:
         raw_profiles = await scraper.search_profiles(query=niche)
-    
+
     saved_influencers = []
     new_influencers = []
-    
+
     for profile_data in raw_profiles:
-        # 2. Execute a SQL SELECT statement to check for existing handles
-        statement = select(Influencer).where(Influencer.handle == profile_data.handle)
-        existing_influencer = db.exec(statement).first()
+        existing_influencer = db.exec(
+            select(Influencer).where(
+                Influencer.handle == profile_data.handle,
+                Influencer.user_id == user_id,
+            )
+        ).first()
 
         if existing_influencer:
             saved_influencers.append(existing_influencer)
         else:
-            # 3. Instantiate the SQLModel class from the validated DiscoveredProfile
-            new_influencer = Influencer(**profile_data.model_dump())
+            new_influencer = Influencer(**profile_data.model_dump(), user_id=user_id)
             db.add(new_influencer)
             new_influencers.append(new_influencer)
             saved_influencers.append(new_influencer)
-            
-    # 4. Commit only if new records were added to the session
+
     if new_influencers:
         db.commit()
-        # 5. Refresh loads the database-generated UUIDs and default values back into the Python objects
         for influencer in new_influencers:
             db.refresh(influencer)
-        invalidate_cache("dashboard", "influencers")
+        invalidate_cache(f"{user_id}:dashboard", f"{user_id}:influencers")
 
     return [i.model_dump(exclude={"campaigns"}) for i in saved_influencers]
 
@@ -125,16 +125,22 @@ class BulkDeleteRequest(BaseModel):
 @router.post("/influencers/bulk-delete")
 def bulk_delete(
     body: BulkDeleteRequest,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
     deleted = 0
     for inf_id in body.influencer_ids:
-        influencer = db.get(Influencer, uuid.UUID(inf_id))
+        influencer = db.exec(
+            select(Influencer).where(
+                Influencer.id == uuid.UUID(inf_id),
+                Influencer.user_id == user_id,
+            )
+        ).first()
         if influencer:
             db.delete(influencer)
             deleted += 1
     db.commit()
-    invalidate_cache("dashboard", "influencers")
+    invalidate_cache(f"{user_id}:dashboard", f"{user_id}:influencers")
     return {"deleted": deleted}
 
 
@@ -146,12 +152,14 @@ class BulkTagRequest(BaseModel):
 @router.post("/influencers/bulk-tag")
 def bulk_tag(
     body: BulkTagRequest,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    # Get or create tag
-    tag = db.exec(select(Tag).where(Tag.name == body.tag_name)).first()
+    tag = db.exec(
+        select(Tag).where(Tag.name == body.tag_name, Tag.user_id == user_id)
+    ).first()
     if not tag:
-        tag = Tag(name=body.tag_name)
+        tag = Tag(name=body.tag_name, user_id=user_id)
         db.add(tag)
         db.commit()
         db.refresh(tag)
@@ -159,6 +167,11 @@ def bulk_tag(
     tagged = 0
     for inf_id in body.influencer_ids:
         uid = uuid.UUID(inf_id)
+        influencer = db.exec(
+            select(Influencer).where(Influencer.id == uid, Influencer.user_id == user_id)
+        ).first()
+        if not influencer:
+            continue
         existing = db.exec(
             select(InfluencerTag).where(
                 InfluencerTag.influencer_id == uid,
@@ -170,5 +183,5 @@ def bulk_tag(
             tagged += 1
 
     db.commit()
-    invalidate_cache("tags", "influencers")
+    invalidate_cache(f"{user_id}:tags", f"{user_id}:influencers")
     return {"tagged": tagged}

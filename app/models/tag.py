@@ -3,6 +3,7 @@ import uuid
 from typing import Optional
 from pydantic import BaseModel
 from sqlmodel import Field, SQLModel
+from sqlalchemy import UniqueConstraint
 
 
 class InfluencerTag(SQLModel, table=True):
@@ -13,8 +14,11 @@ class InfluencerTag(SQLModel, table=True):
 
 
 class Tag(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_tag_user_name"),)
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    name: str = Field(unique=True, index=True)
+    user_id: str = Field(index=True)
+    name: str = Field(index=True)
 
 
 class TagCreate(BaseModel):

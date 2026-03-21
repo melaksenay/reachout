@@ -28,13 +28,15 @@ def test_cascade_delete_via_orm(db: Session, sample_influencer: Influencer):
     # Create related records
     campaign = OutreachCampaign(
         influencer_id=sample_influencer.id,
+        user_id="test-user-id",
         status="drafted",
     )
     note = InfluencerNote(
         influencer_id=sample_influencer.id,
+        user_id="test-user-id",
         body="test note",
     )
-    tag = Tag(name="testtag")
+    tag = Tag(name="testtag", user_id="test-user-id")
     db.add_all([campaign, note, tag])
     db.commit()
     db.refresh(tag)

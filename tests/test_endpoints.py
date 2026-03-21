@@ -28,6 +28,7 @@ async def test_get_influencers_filter_platform(client: AsyncClient, db, sample_i
         platform="instagram",
         handle="instauser",
         url="https://instagram.com/instauser",
+        user_id="test-user-id",
     )
     db.add(inf2)
     db.commit()
@@ -101,3 +102,20 @@ async def test_bulk_tag_idempotent(client: AsyncClient, sample_influencer):
         json={"influencer_ids": [inf_id], "tag_name": "fitness"},
     )
     assert resp.json()["tagged"] == 0
+
+
+@pytest.mark.asyncio
+async def test_data_isolation(client: AsyncClient, db):
+    """Data belonging to a different user must not be visible to the test user."""
+    other = Influencer(
+        platform="tiktok",
+        handle="otheruserhandle",
+        url="https://tiktok.com/@otheruserhandle",
+        user_id="other-user-id",
+    )
+    db.add(other)
+    db.commit()
+
+    resp = await client.get("/api/v1/influencers")
+    assert resp.status_code == 200
+    assert resp.json() == []

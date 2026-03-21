@@ -10,7 +10,8 @@ class UserSettings(SQLModel, table=True):
     __tablename__: str = "user_settings"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    key: str = Field(unique=True, index=True)
+    user_id: str = Field(unique=True, index=True)
+    key: Optional[str] = Field(default=None)
     brand_description: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

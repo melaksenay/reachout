@@ -82,7 +82,10 @@ async def client(db):
     # Disable Redis in tests so cached endpoints always hit the test DB
     with patch("app.core.cache.get_redis", return_value=None), \
          patch("app.api.endpoints.get_redis", return_value=None), \
-         patch("app.api.campaigns.get_redis", return_value=None):
+         patch("app.api.campaigns.get_redis", return_value=None), \
+         patch("app.api.influencer_detail.get_redis", return_value=None), \
+         patch("app.api.dashboard.get_redis", return_value=None), \
+         patch("app.api.settings.get_redis", return_value=None):
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             yield ac
 
@@ -98,6 +101,7 @@ def sample_influencer(db) -> Influencer:
         url="https://www.tiktok.com/@testcreator",
         bio_text="Test bio",
         follower_count=5000,
+        user_id="test-user-id",
     )
     db.add(inf)
     db.commit()

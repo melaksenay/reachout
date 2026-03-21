@@ -13,6 +13,9 @@ wheels/
 #Session
 tiktok_sessions
 
+# macOS
+.DS_Store
+
 #Misc
 README_private.md
 system-design.md

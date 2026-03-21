@@ -18,6 +18,7 @@ class OutreachCampaign(SQLModel, table=True):
     __tablename__: str = "outreach_campaign"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: str = Field(index=True)
     influencer_id: uuid.UUID = Field(foreign_key="influencer.id", ondelete="CASCADE")
     status: str = Field(default="drafted")
     generated_message: Optional[str] = None

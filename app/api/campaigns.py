@@ -32,14 +32,15 @@ router = APIRouter(dependencies=[Depends(get_current_user_id)])
 @router.get("/campaigns", response_model=List[CampaignWithInfluencer])
 def get_all_campaigns(
     status: Optional[str] = None,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    # Only cache the unfiltered base list
     r = get_redis()
+    cache_key = f"cache:{user_id}:campaigns"
 
     if not status and r is not None:
         try:
-            hit = r.get("cache:campaigns")  # type: ignore[arg-type]
+            hit = r.get(cache_key)
             if hit is not None:
                 logger.info("CACHE HIT [campaigns]: serving from Redis")
                 return json.loads(hit)
@@ -50,6 +51,7 @@ def get_all_campaigns(
     statement = (
         select(OutreachCampaign, Influencer)
         .join(Influencer, col(OutreachCampaign.influencer_id) == col(Influencer.id))
+        .where(OutreachCampaign.user_id == user_id)
         .order_by(desc(OutreachCampaign.last_updated))
     )
     if status:
@@ -74,7 +76,7 @@ def get_all_campaigns(
 
     if not status and r is not None:
         try:
-            r.setex("cache:campaigns", 60, json.dumps(result, cls=_CacheEncoder))
+            r.setex(cache_key, 60, json.dumps(result, cls=_CacheEncoder))
             logger.info("CACHE SET [campaigns]: stored with TTL=60s")
         except Exception:
             logger.warning("Redis SET failed for campaigns, response served uncached")
@@ -86,9 +88,15 @@ def get_all_campaigns(
 def update_campaign_status(
     campaign_id: uuid.UUID,
     body: CampaignStatusUpdate,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    campaign = db.get(OutreachCampaign, campaign_id)
+    campaign = db.exec(
+        select(OutreachCampaign).where(
+            OutreachCampaign.id == campaign_id,
+            OutreachCampaign.user_id == user_id,
+        )
+    ).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     campaign.status = body.status
@@ -97,7 +105,7 @@ def update_campaign_status(
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
-    invalidate_cache("dashboard", "campaigns")
+    invalidate_cache(f"{user_id}:dashboard", f"{user_id}:campaigns")
     return campaign
 
 
@@ -105,9 +113,15 @@ def update_campaign_status(
 def update_campaign_notes(
     campaign_id: uuid.UUID,
     body: CampaignNotesUpdate,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    campaign = db.get(OutreachCampaign, campaign_id)
+    campaign = db.exec(
+        select(OutreachCampaign).where(
+            OutreachCampaign.id == campaign_id,
+            OutreachCampaign.user_id == user_id,
+        )
+    ).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     campaign.notes = body.notes
@@ -115,7 +129,7 @@ def update_campaign_notes(
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
-    invalidate_cache("campaigns")
+    invalidate_cache(f"{user_id}:campaigns")
     return campaign
 
 
@@ -123,9 +137,15 @@ def update_campaign_notes(
 def update_campaign_message(
     campaign_id: uuid.UUID,
     body: CampaignMessageUpdate,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    campaign = db.get(OutreachCampaign, campaign_id)
+    campaign = db.exec(
+        select(OutreachCampaign).where(
+            OutreachCampaign.id == campaign_id,
+            OutreachCampaign.user_id == user_id,
+        )
+    ).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     campaign.generated_message = body.generated_message
@@ -133,30 +153,36 @@ def update_campaign_message(
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
-    invalidate_cache("campaigns")
+    invalidate_cache(f"{user_id}:campaigns")
     return campaign
 
 
 @router.post("/campaigns/{influencer_id}/draft")
 async def draft_campaign(
     influencer_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    # 1. Fetch the influencer
-    influencer = db.get(Influencer, influencer_id)
+    influencer = db.exec(
+        select(Influencer).where(
+            Influencer.id == influencer_id,
+            Influencer.user_id == user_id,
+        )
+    ).first()
     if not influencer:
         raise HTTPException(status_code=404, detail="Influencer not found")
 
-    # 2. Check if a campaign already exists to avoid duplicates
     existing = db.exec(
-        select(OutreachCampaign).where(OutreachCampaign.influencer_id == influencer_id)
+        select(OutreachCampaign).where(
+            OutreachCampaign.influencer_id == influencer_id,
+            OutreachCampaign.user_id == user_id,
+        )
     ).first()
     if existing:
         return existing
 
-    # 3. Fetch brand description from settings
     settings = db.exec(
-        select(UserSettings).where(UserSettings.key == "default")
+        select(UserSettings).where(UserSettings.user_id == user_id)
     ).first()
     brand_description = settings.brand_description if settings else None
 
@@ -166,16 +192,15 @@ async def draft_campaign(
             detail="Brand description not set. Go to Settings first."
         )
 
-    # 4. Scrape the influencer's TikTok profile for context
     discovery = TikTokDiscovery()
     profile_context = await discovery.scrape_profile(influencer.handle)
 
-    # 5. Generate personalized message via Claude
     ai_service = AIOutreachService()
     draft_text = ai_service.generate_message(influencer, brand_description, profile_context)
 
     new_campaign = OutreachCampaign(
         influencer_id=influencer.id,
+        user_id=user_id,
         generated_message=draft_text,
         status="drafted",
     )
@@ -183,7 +208,7 @@ async def draft_campaign(
     db.add(new_campaign)
     db.commit()
     db.refresh(new_campaign)
-    invalidate_cache("dashboard", "campaigns")
+    invalidate_cache(f"{user_id}:dashboard", f"{user_id}:campaigns")
 
     return new_campaign
 
@@ -207,10 +232,11 @@ class BulkStatusRequest(BaseModel):
 @router.post("/campaigns/bulk-draft")
 async def bulk_draft(
     body: BulkDraftRequest,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
     settings = db.exec(
-        select(UserSettings).where(UserSettings.key == "default")
+        select(UserSettings).where(UserSettings.user_id == user_id)
     ).first()
     brand_description = settings.brand_description if settings else None
     if not brand_description:
@@ -225,13 +251,17 @@ async def bulk_draft(
 
     for inf_id in body.influencer_ids:
         uid = uuid.UUID(inf_id)
-        influencer = db.get(Influencer, uid)
+        influencer = db.exec(
+            select(Influencer).where(Influencer.id == uid, Influencer.user_id == user_id)
+        ).first()
         if not influencer:
             continue
 
-        # Skip if campaign already exists
         existing = db.exec(
-            select(OutreachCampaign).where(OutreachCampaign.influencer_id == uid)
+            select(OutreachCampaign).where(
+                OutreachCampaign.influencer_id == uid,
+                OutreachCampaign.user_id == user_id,
+            )
         ).first()
         if existing:
             results.append(existing)
@@ -242,6 +272,7 @@ async def bulk_draft(
 
         campaign = OutreachCampaign(
             influencer_id=influencer.id,
+            user_id=user_id,
             generated_message=draft_text,
             status="drafted",
         )
@@ -250,19 +281,25 @@ async def bulk_draft(
         db.refresh(campaign)
         results.append(campaign)
 
-    invalidate_cache("dashboard", "campaigns")
+    invalidate_cache(f"{user_id}:dashboard", f"{user_id}:campaigns")
     return results
 
 
 @router.patch("/campaigns/bulk-status")
 def bulk_update_status(
     body: BulkStatusRequest,
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
     now = datetime.now(timezone.utc)
     updated = 0
     for cid in body.campaign_ids:
-        campaign = db.get(OutreachCampaign, uuid.UUID(cid))
+        campaign = db.exec(
+            select(OutreachCampaign).where(
+                OutreachCampaign.id == uuid.UUID(cid),
+                OutreachCampaign.user_id == user_id,
+            )
+        ).first()
         if not campaign:
             continue
         campaign.status = body.status
@@ -271,5 +308,5 @@ def bulk_update_status(
         db.add(campaign)
         updated += 1
     db.commit()
-    invalidate_cache("dashboard", "campaigns")
+    invalidate_cache(f"{user_id}:dashboard", f"{user_id}:campaigns")
     return {"updated": updated}

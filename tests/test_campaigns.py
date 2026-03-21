@@ -12,6 +12,7 @@ def sample_campaign(db: Session, sample_influencer: Influencer) -> OutreachCampa
     """Insert and return a sample campaign."""
     campaign = OutreachCampaign(
         influencer_id=sample_influencer.id,
+        user_id="test-user-id",
         status="drafted",
         generated_message="Hey! Let's collab.",
     )

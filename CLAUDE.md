@@ -48,7 +48,7 @@ Layered FastAPI monolith for influencer discovery and outreach. On startup, `Tik
 - **`app/main.py`** — App factory with lifespan handler (auto-creates tables via SQLModel at startup). Mounts routers at `/api/v1`.
 - **`app/api/`** — Route handlers. Use `Depends()` for DB session and service injection.
 - **`app/services/`** — Business logic. `TikTokDiscovery` does Playwright-based TikTok scraping with stealth (user/video/hashtag search modes); `OutreachService` generates AI outreach messages via Claude API.
-- **`app/models/`** — SQLModel classes (dual ORM table definitions + Pydantic response models).
+- **`app/models/`** — SQLModel classes (dual ORM table definitions + Pydantic response DTOs). All API endpoints return flat Pydantic DTOs (`InfluencerRead`, `CampaignRead`, `CampaignWithInfluencer`) instead of raw ORM objects — this prevents N+1 queries from lazy-loaded relationships and controls the API response shape.
 - **`app/core/config.py`** — Pydantic Settings singleton (loaded from `.env` via `lru_cache`).
 - **`app/core/cache.py`** — Redis cache-aside layer. Provides `get_redis()` client, `@cached` decorator, `invalidate_cache()` helper, and a custom JSON encoder for SQLModel/Pydantic objects.
 - **`app/db/session.py`** — Synchronous SQLModel/SQLAlchemy engine and `get_db()` generator for request-scoped sessions.
@@ -107,7 +107,7 @@ Video/hashtag searches extract handles from both embedded JSON (`#__UNIVERSAL_DA
 
 PostgreSQL via Supabase. Tables in `public` schema:
 
-- **`influencer`** — `id` (UUID PK), `platform`, `handle` (unique), `url`, `bio_text`, `follower_count`, `created_at`
+- **`influencer`** — `id` (UUID PK), `user_id` (indexed), `platform`, `handle`, `url`, `bio_text`, `follower_count`, `created_at`; unique constraint on `(user_id, handle)`
 - **`outreach_campaign`** — `id` (UUID PK), `influencer_id` (FK → influencer, CASCADE), `status`, `generated_message`, `last_updated`, `status_updated_at`, `notes`
 - **`influencer_note`** — `id` (UUID PK), `influencer_id` (FK → influencer, CASCADE), `body`, `created_at`
 - **`tag`** — `id` (UUID PK), `name` (unique)
@@ -115,6 +115,10 @@ PostgreSQL via Supabase. Tables in `public` schema:
 - **`user_settings`** — `id` (UUID PK), `key` (unique, currently always `"default"`), `brand_description`, `created_at`, `updated_at`
 
 All FKs use `ondelete="CASCADE"` — deleting an influencer cleans up campaigns, notes, and tag links automatically.
+
+### User Isolation
+
+Every request is authenticated via `get_current_user_id()` (`app/core/auth.py`), which decodes the Supabase JWT using a hardcoded ES256 JWK (not `SUPABASE_JWT_SECRET`). The resolved `user_id` (JWT `sub` claim) is passed into all queries — every DB read/write filters by `user_id` so users only see their own data. Cache keys are namespaced per user (e.g., `cache:{user_id}:influencers`).
 
 Tables are auto-created via SQLModel metadata at startup. Schema changes should be made directly via the Supabase dashboard or SQL editor. There is no migration tool (no Alembic).
 
@@ -159,7 +163,7 @@ No real Redis, Playwright browser, or Supabase auth is needed to run tests.
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_PUBLISHABLE_KEY` | Yes | Supabase anon/public key |
 | `SUPABASE_SECRET_KEY` | Yes | Supabase service role key |
-| `SUPABASE_JWT_SECRET` | Yes | JWT secret for validating auth tokens |
+| `SUPABASE_JWT_SECRET` | No | Declared in config but unused — auth uses a hardcoded ES256 JWK in `app/core/auth.py` |
 | `MY_HANDLE` | Yes | Your TikTok handle (filtered from search results) |
 | `ANTHROPIC_API_KEY` | Yes | Claude API key for AI message generation |
 | `REDIS_URL` | No | e.g. `redis://localhost:6379` — enables caching; app works without it |

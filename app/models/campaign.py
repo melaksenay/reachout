@@ -2,7 +2,7 @@
 from typing import Optional, TYPE_CHECKING
 from datetime import datetime, timezone
 import uuid
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlmodel import Field, SQLModel, Relationship
 
 # This prevents circular imports during runtime but allows type checking
@@ -47,6 +47,20 @@ class CampaignNotesUpdate(BaseModel):
 
 class CampaignMessageUpdate(BaseModel):
     generated_message: str
+
+
+class CampaignRead(BaseModel):
+    """Flat DTO for single-campaign responses — no ORM relationships."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    influencer_id: uuid.UUID
+    user_id: str
+    status: str
+    generated_message: Optional[str] = None
+    last_updated: datetime
+    status_updated_at: datetime
+    notes: Optional[str] = None
 
 
 class CampaignWithInfluencer(BaseModel):

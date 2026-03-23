@@ -8,7 +8,7 @@ from sqlmodel import Session, select, desc, col
 
 from app.db.session import get_db
 from app.services.discovery import TikTokDiscovery
-from app.models.influencer import Influencer
+from app.models.influencer import Influencer, InfluencerRead
 from app.models.tag import Tag, InfluencerTag
 from app.core.auth import get_current_user_id
 from app.core.cache import get_redis, invalidate_cache, _CacheEncoder
@@ -62,7 +62,7 @@ async def get_all_influencers(
 
     statement = statement.order_by(desc(Influencer.created_at))
     results = db.exec(statement).all()
-    result = [row.model_dump(exclude={"campaigns"}) for row in results]
+    result = [InfluencerRead.model_validate(row).model_dump() for row in results]
 
     if not has_filters and r is not None:
         try:
@@ -115,7 +115,7 @@ async def discover_influencers(
             db.refresh(influencer)
         invalidate_cache(f"{user_id}:dashboard", f"{user_id}:influencers")
 
-    return [i.model_dump(exclude={"campaigns"}) for i in saved_influencers]
+    return [InfluencerRead.model_validate(i).model_dump() for i in saved_influencers]
 
 
 class BulkDeleteRequest(BaseModel):

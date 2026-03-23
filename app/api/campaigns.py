@@ -10,6 +10,7 @@ from app.models.influencer import Influencer
 from pydantic import BaseModel, field_validator
 from app.models.campaign import (
     OutreachCampaign,
+    CampaignRead,
     CampaignStatusUpdate,
     CampaignNotesUpdate,
     CampaignMessageUpdate,
@@ -84,7 +85,7 @@ def get_all_campaigns(
     return result
 
 
-@router.patch("/campaigns/{campaign_id}/status", response_model=OutreachCampaign)
+@router.patch("/campaigns/{campaign_id}/status", response_model=CampaignRead)
 def update_campaign_status(
     campaign_id: uuid.UUID,
     body: CampaignStatusUpdate,
@@ -109,7 +110,7 @@ def update_campaign_status(
     return campaign
 
 
-@router.patch("/campaigns/{campaign_id}/notes", response_model=OutreachCampaign)
+@router.patch("/campaigns/{campaign_id}/notes", response_model=CampaignRead)
 def update_campaign_notes(
     campaign_id: uuid.UUID,
     body: CampaignNotesUpdate,
@@ -133,7 +134,7 @@ def update_campaign_notes(
     return campaign
 
 
-@router.patch("/campaigns/{campaign_id}/message", response_model=OutreachCampaign)
+@router.patch("/campaigns/{campaign_id}/message", response_model=CampaignRead)
 def update_campaign_message(
     campaign_id: uuid.UUID,
     body: CampaignMessageUpdate,
@@ -179,7 +180,7 @@ async def draft_campaign(
         )
     ).first()
     if existing:
-        return existing
+        return CampaignRead.model_validate(existing)
 
     settings = db.exec(
         select(UserSettings).where(UserSettings.user_id == user_id)
@@ -210,7 +211,7 @@ async def draft_campaign(
     db.refresh(new_campaign)
     invalidate_cache(f"{user_id}:dashboard", f"{user_id}:campaigns")
 
-    return new_campaign
+    return CampaignRead.model_validate(new_campaign)
 
 
 class BulkDraftRequest(BaseModel):
@@ -282,7 +283,7 @@ async def bulk_draft(
         results.append(campaign)
 
     invalidate_cache(f"{user_id}:dashboard", f"{user_id}:campaigns")
-    return results
+    return [CampaignRead.model_validate(c) for c in results]
 
 
 @router.patch("/campaigns/bulk-status")

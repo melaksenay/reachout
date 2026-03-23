@@ -7,8 +7,8 @@ import json
 import logging
 
 from app.db.session import get_db
-from app.models.influencer import Influencer
-from app.models.campaign import OutreachCampaign
+from app.models.influencer import Influencer, InfluencerRead
+from app.models.campaign import OutreachCampaign, CampaignRead
 from app.models.influencer_note import InfluencerNote, NoteCreate
 from app.models.tag import Tag, InfluencerTag, TagCreate
 from app.core.auth import get_current_user_id
@@ -62,8 +62,8 @@ def get_influencer_detail(
     ).all()
 
     return {
-        "influencer": influencer.model_dump(exclude={"campaigns"}),
-        "campaigns": campaigns,
+        "influencer": InfluencerRead.model_validate(influencer),
+        "campaigns": [CampaignRead.model_validate(c) for c in campaigns],
         "notes": notes,
         "tags": tag_rows,
     }
@@ -95,7 +95,7 @@ async def refresh_profile(
     db.commit()
     db.refresh(influencer)
     invalidate_cache(f"{user_id}:influencers")
-    return influencer.model_dump(exclude={"campaigns"})
+    return InfluencerRead.model_validate(influencer)
 
 
 # --- Notes ---

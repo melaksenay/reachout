@@ -2,7 +2,7 @@
 from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime, timezone
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlmodel import Field, Relationship, SQLModel
 from sqlalchemy import UniqueConstraint
 
@@ -33,3 +33,17 @@ class Influencer(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     campaigns: List["OutreachCampaign"] = Relationship(back_populates="influencer")
+
+
+class InfluencerRead(BaseModel):
+    """Flat DTO for influencer API responses — no ORM relationships."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: str
+    platform: str
+    handle: str
+    url: str
+    bio_text: Optional[str] = None
+    follower_count: Optional[int] = None
+    created_at: datetime
